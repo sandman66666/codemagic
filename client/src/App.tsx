@@ -9,6 +9,7 @@ import RepositoryPage from './pages/RepositoryPage';
 import AnalysisPage from './pages/AnalysisPage';
 import ProfilePage from './pages/ProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
+import AuthCallback from './pages/AuthCallback';
 import { AuthProvider } from './contexts/AuthContext';
 
 const App: React.FC = () => {
@@ -19,6 +20,7 @@ const App: React.FC = () => {
           <Route path="/" element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="login" element={<LoginPage />} />
+            <Route path="auth-callback" element={<AuthCallback />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="repository/:repoId" element={<RepositoryPage />} />
             <Route path="analysis/:analysisId" element={<AnalysisPage />} />
