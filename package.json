@@ -1,0 +1,34 @@
+{
+  "name": "codeinsight",
+  "version": "1.0.0",
+  "description": "Web application that enhances code understanding by leveraging AI to analyze GitHub repositories",
+  "main": "index.js",
+  "scripts": {
+    "install:all": "npm install && npm run install:client && npm run install:server",
+    "install:client": "cd client && npm install",
+    "install:server": "cd server && npm install",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "build": "npm run build:server && npm run build:client",
+    "start": "cd server && npm run start"
+  },
+  "keywords": [
+    "code-analysis",
+    "github",
+    "ai",
+    "react",
+    "node",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "all": "^0.0.0"
+  }
+}
