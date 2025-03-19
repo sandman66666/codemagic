@@ -35,7 +35,7 @@ app.use(passport.initialize());
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/repositories', repositoryRoutes);
-app.use('/api/analysis', analysisRoutes);
+app.use('/api/analyses', analysisRoutes);
 app.use('/api/users', userRoutes);
 
 // Serve static assets in production

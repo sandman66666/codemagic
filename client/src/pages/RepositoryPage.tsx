@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -30,36 +30,12 @@ import {
   FormLabel,
   Input,
   Select,
+  Skeleton,
+  useToast,
 } from '@chakra-ui/react';
 import { FiGithub, FiCode, FiLock, FiStar, FiCalendar, FiFilter } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
-
-// Mock data for a single repository
-const mockRepository = {
-  id: '1',
-  name: 'project-alpha',
-  fullName: 'johndoe/project-alpha',
-  description: 'A scalable React application with TypeScript',
-  language: 'TypeScript',
-  stars: 42,
-  forks: 15,
-  private: false,
-  lastUpdated: '2025-03-15',
-  createdAt: '2024-11-20',
-  owner: {
-    login: 'johndoe',
-    avatarUrl: 'https://avatars.githubusercontent.com/u/1234567',
-  },
-  branches: ['main', 'develop', 'feature/auth'],
-  languages: {
-    TypeScript: 68,
-    JavaScript: 25,
-    CSS: 5,
-    HTML: 2,
-  },
-  fileCount: 142,
-  totalSize: '3.2 MB',
-};
+import { repositoryApi, analysisApi } from '../services/api';
 
 const RepositoryPage: React.FC = () => {
   const { repoId } = useParams<{ repoId: string }>();
@@ -69,6 +45,11 @@ const RepositoryPage: React.FC = () => {
   const [showAlert, setShowAlert] = useState(false);
   const [progress, setProgress] = useState(0);
   const [selectedBranch, setSelectedBranch] = useState('main');
+  const [repository, setRepository] = useState<any>(null);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const toast = useToast();
   const [filters, setFilters] = useState({
     includeTests: false,
     includeDocumentation: true,
@@ -76,24 +57,109 @@ const RepositoryPage: React.FC = () => {
     maxFileSize: '5',
   });
 
-  // Simulated analysis function
-  const startAnalysis = () => {
+  useEffect(() => {
+    const fetchRepositoryData = async () => {
+      if (!repoId || !isAuthenticated) return;
+      
+      setLoading(true);
+      try {
+        // Fetch repository details
+        const repoResponse = await repositoryApi.getRepositoryById(repoId);
+        setRepository(repoResponse.data);
+        
+        // Fetch repository branches
+        const branchesResponse = await repositoryApi.getRepositoryBranches(repoId);
+        setBranches(branchesResponse.data.map((branch: any) => branch.name));
+        
+        // Set default branch if available
+        if (repoResponse.data.defaultBranch) {
+          setSelectedBranch(repoResponse.data.defaultBranch);
+        }
+      } catch (error) {
+        console.error('Error fetching repository data:', error);
+        toast({
+          title: 'Error loading repository',
+          description: 'There was an error loading the repository details.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRepositoryData();
+  }, [repoId, isAuthenticated, toast]);
+
+  // Start analysis function
+  const startAnalysis = async () => {
+    if (!repository) return;
+    
     setIsAnalyzing(true);
     setProgress(0);
     
-    // Simulate progress updates
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        const newProgress = prev + Math.floor(Math.random() * 10);
-        if (newProgress >= 100) {
-          clearInterval(interval);
+    try {
+      // Start the analysis
+      const response = await analysisApi.startAnalysis(
+        repository._id,
+        selectedBranch,
+        filters
+      );
+      
+      setAnalysisId(response.data._id);
+      
+      // Poll for analysis status
+      const statusInterval = setInterval(async () => {
+        try {
+          const statusResponse = await analysisApi.getAnalysisStatus(response.data._id);
+          const status = statusResponse.data.status;
+          
+          // Update progress based on status
+          if (status === 'pending') {
+            setProgress(10);
+          } else if (status === 'processing') {
+            setProgress(prev => Math.min(prev + 10, 90));
+          } else if (status === 'completed') {
+            setProgress(100);
+            setIsAnalyzing(false);
+            setShowAlert(true);
+            clearInterval(statusInterval);
+          } else if (status === 'failed') {
+            setIsAnalyzing(false);
+            clearInterval(statusInterval);
+            toast({
+              title: 'Analysis failed',
+              description: 'There was an error analyzing your repository.',
+              status: 'error',
+              duration: 5000,
+              isClosable: true,
+            });
+          }
+        } catch (error) {
+          console.error('Error polling analysis status:', error);
+          clearInterval(statusInterval);
           setIsAnalyzing(false);
-          setShowAlert(true);
-          return 100;
+          toast({
+            title: 'Error tracking analysis',
+            description: 'There was an error tracking the analysis progress.',
+            status: 'error',
+            duration: 5000,
+            isClosable: true,
+          });
         }
-        return newProgress;
+      }, 3000);
+    } catch (error) {
+      console.error('Error starting analysis:', error);
+      setIsAnalyzing(false);
+      toast({
+        title: 'Analysis failed',
+        description: 'There was an error starting the analysis.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
       });
-    }, 500);
+    }
   };
 
   const handleFilterChange = (name: string, value: string | boolean) => {
@@ -136,7 +202,7 @@ const RepositoryPage: React.FC = () => {
             <Button 
               mt={4} 
               colorScheme="brand" 
-              onClick={() => navigate(`/analysis/new-${repoId}`)}
+              onClick={() => navigate(`/analysis/${analysisId}`)}
             >
               View Results
             </Button>
@@ -149,48 +215,61 @@ const RepositoryPage: React.FC = () => {
           </Alert>
         )}
         
-        <Box
-          p={5}
-          shadow="md"
-          borderWidth="1px"
-          borderRadius="lg"
-          bg={useColorModeValue('white', 'gray.700')}
-        >
-          <HStack justify="space-between" mb={4}>
-            <HStack>
-              <FiGithub size={24} />
-              <Heading size="lg">{mockRepository.name}</Heading>
-              <Badge colorScheme={mockRepository.private ? 'red' : 'green'}>
-                {mockRepository.private ? 'Private' : 'Public'}
-              </Badge>
-            </HStack>
-            <HStack>
+        {loading ? (
+          <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+            <Skeleton height="36px" width="60%" mb={4} />
+            <Skeleton height="20px" mb={4} />
+            <Skeleton height="20px" width="80%" mb={2} />
+            <Skeleton height="20px" width="40%" mb={4} />
+          </Box>
+        ) : repository ? (
+          <Box
+            p={5}
+            shadow="md"
+            borderWidth="1px"
+            borderRadius="lg"
+            bg={useColorModeValue('white', 'gray.700')}
+          >
+            <HStack justify="space-between" mb={4}>
               <HStack>
-                <FiStar />
-                <Text>{mockRepository.stars}</Text>
+                <FiGithub size={24} />
+                <Heading size="lg">{repository.name}</Heading>
+                <Badge colorScheme={repository.isPrivate ? 'red' : 'green'}>
+                  {repository.isPrivate ? 'Private' : 'Public'}
+                </Badge>
               </HStack>
               <HStack>
-                <FiCode />
-                <Text>{mockRepository.language}</Text>
+                <HStack>
+                  <FiStar />
+                  <Text>{repository.stars}</Text>
+                </HStack>
+                <HStack>
+                  <FiCode />
+                  <Text>{repository.language}</Text>
+                </HStack>
               </HStack>
             </HStack>
-          </HStack>
-          
-          <Text color="gray.600" mb={4}>
-            {mockRepository.description}
-          </Text>
-          
-          <HStack spacing={4} mb={4}>
-            <HStack>
-              <FiCalendar />
-              <Text fontSize="sm">Created: {mockRepository.createdAt}</Text>
+            
+            <Text color="gray.600" mb={4}>
+              {repository.description}
+            </Text>
+            
+            <HStack spacing={4} mb={4}>
+              <HStack>
+                <FiCalendar />
+                <Text fontSize="sm">Created: {new Date(repository.createdAt).toLocaleDateString()}</Text>
+              </HStack>
+              <HStack>
+                <FiCalendar />
+                <Text fontSize="sm">Last updated: {new Date(repository.updatedAt).toLocaleDateString()}</Text>
+              </HStack>
             </HStack>
-            <HStack>
-              <FiCalendar />
-              <Text fontSize="sm">Last updated: {mockRepository.lastUpdated}</Text>
-            </HStack>
-          </HStack>
-        </Box>
+          </Box>
+        ) : (
+          <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" textAlign="center">
+            <Text>Repository not found</Text>
+          </Box>
+        )}
         
         <Tabs variant="enclosed" colorScheme="brand">
           <TabList>
@@ -199,140 +278,116 @@ const RepositoryPage: React.FC = () => {
           </TabList>
           <TabPanels>
             <TabPanel>
-              <Box
-                p={5}
-                shadow="md"
-                borderWidth="1px"
-                borderRadius="lg"
-                bg={useColorModeValue('white', 'gray.700')}
-              >
-                <VStack spacing={6} align="start">
-                  <Heading size="md">Analysis Configuration</Heading>
-                  
-                  <FormControl>
-                    <FormLabel>Branch to Analyze</FormLabel>
-                    <Select 
-                      value={selectedBranch} 
-                      onChange={(e) => setSelectedBranch(e.target.value)}
-                    >
-                      {mockRepository.branches.map(branch => (
-                        <option key={branch} value={branch}>{branch}</option>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  
-                  <Box w="100%">
-                    <Heading size="sm" mb={3}>File Filters</Heading>
-                    <VStack align="start">
-                      <Checkbox 
-                        isChecked={filters.includeTests}
-                        onChange={(e) => handleFilterChange('includeTests', e.target.checked)}
-                      >
-                        Include test files
-                      </Checkbox>
-                      <Checkbox 
-                        isChecked={filters.includeDocumentation}
-                        onChange={(e) => handleFilterChange('includeDocumentation', e.target.checked)}
-                      >
-                        Include documentation
-                      </Checkbox>
-                      <Checkbox 
-                        isChecked={filters.includeNodeModules}
-                        onChange={(e) => handleFilterChange('includeNodeModules', e.target.checked)}
-                      >
-                        Include node_modules (not recommended)
-                      </Checkbox>
-                      <FormControl>
-                        <FormLabel>Maximum file size (MB)</FormLabel>
-                        <Input 
-                          type="number" 
-                          value={filters.maxFileSize}
-                          onChange={(e) => handleFilterChange('maxFileSize', e.target.value)}
-                          width="100px"
-                        />
-                      </FormControl>
-                    </VStack>
-                  </Box>
-                  
-                  <Box w="100%">
-                    <Heading size="sm" mb={3}>Analysis Options</Heading>
-                    <VStack align="start">
-                      <Checkbox defaultChecked>Code quality assessment</Checkbox>
-                      <Checkbox defaultChecked>Security vulnerability scanning</Checkbox>
-                      <Checkbox defaultChecked>Architecture analysis</Checkbox>
-                      <Checkbox defaultChecked>Generate documentation</Checkbox>
-                    </VStack>
-                  </Box>
-                  
-                  {isAnalyzing && (
-                    <Box w="100%">
-                      <Text mb={2}>Analyzing repository...</Text>
-                      <Progress value={progress} size="sm" colorScheme="brand" borderRadius="md" />
-                    </Box>
-                  )}
-                  
-                  <Button
-                    colorScheme="brand"
-                    size="lg"
-                    onClick={startAnalysis}
-                    isLoading={isAnalyzing}
-                    loadingText="Analyzing"
-                    spinnerPlacement="start"
-                    width="100%"
+              <Stack spacing={6}>
+                <Box>
+                  <Heading size="sm" mb={3}>Branch to Analyze</Heading>
+                  <Select 
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    isDisabled={isAnalyzing || branches.length === 0}
                   >
-                    Start Analysis
-                  </Button>
-                </VStack>
-              </Box>
+                    {branches.length > 0 ? (
+                      branches.map(branch => (
+                        <option key={branch} value={branch}>{branch}</option>
+                      ))
+                    ) : (
+                      <option value="main">main</option>
+                    )}
+                  </Select>
+                </Box>
+                
+                <Box>
+                  <Heading size="sm" mb={3}>Analysis Filters</Heading>
+                  <Stack spacing={3}>
+                    <Checkbox 
+                      isChecked={filters.includeTests}
+                      onChange={(e) => handleFilterChange('includeTests', e.target.checked)}
+                      isDisabled={isAnalyzing}
+                    >
+                      Include test files
+                    </Checkbox>
+                    <Checkbox 
+                      isChecked={filters.includeDocumentation}
+                      onChange={(e) => handleFilterChange('includeDocumentation', e.target.checked)}
+                      isDisabled={isAnalyzing}
+                    >
+                      Include documentation files
+                    </Checkbox>
+                    <Checkbox 
+                      isChecked={filters.includeNodeModules}
+                      onChange={(e) => handleFilterChange('includeNodeModules', e.target.checked)}
+                      isDisabled={isAnalyzing}
+                    >
+                      Include node_modules (not recommended)
+                    </Checkbox>
+                    
+                    <FormControl>
+                      <FormLabel>Maximum file size to analyze (MB)</FormLabel>
+                      <Input 
+                        type="number" 
+                        value={filters.maxFileSize}
+                        onChange={(e) => handleFilterChange('maxFileSize', e.target.value)}
+                        isDisabled={isAnalyzing}
+                        min="1"
+                        max="20"
+                      />
+                    </FormControl>
+                  </Stack>
+                </Box>
+                
+                {isAnalyzing && (
+                  <Box>
+                    <Text mb={2}>Analysis in progress... {progress}%</Text>
+                    <Progress value={progress} size="sm" colorScheme="brand" borderRadius="md" />
+                  </Box>
+                )}
+                
+                <Button 
+                  colorScheme="brand" 
+                  size="lg" 
+                  onClick={startAnalysis}
+                  isLoading={isAnalyzing}
+                  loadingText="Analyzing..."
+                  isDisabled={!repository || isAnalyzing}
+                >
+                  Start Analysis
+                </Button>
+              </Stack>
             </TabPanel>
             <TabPanel>
-              <Box
-                p={5}
-                shadow="md"
-                borderWidth="1px"
-                borderRadius="lg"
-                bg={useColorModeValue('white', 'gray.700')}
-              >
-                <VStack spacing={6} align="start">
-                  <Heading size="md">Repository Statistics</Heading>
-                  
-                  <HStack spacing={10}>
-                    <VStack align="start">
-                      <Text color="gray.500">Repository Size</Text>
-                      <Text fontWeight="bold">{mockRepository.totalSize}</Text>
-                    </VStack>
-                    <VStack align="start">
-                      <Text color="gray.500">Files</Text>
-                      <Text fontWeight="bold">{mockRepository.fileCount}</Text>
-                    </VStack>
-                    <VStack align="start">
-                      <Text color="gray.500">Branches</Text>
-                      <Text fontWeight="bold">{mockRepository.branches.length}</Text>
-                    </VStack>
-                    <VStack align="start">
-                      <Text color="gray.500">Forks</Text>
-                      <Text fontWeight="bold">{mockRepository.forks}</Text>
-                    </VStack>
-                  </HStack>
-                  
-                  <Divider />
-                  
-                  <Box w="100%">
-                    <Heading size="sm" mb={4}>Language Distribution</Heading>
-                    <VStack spacing={2} align="start" w="100%">
-                      {Object.entries(mockRepository.languages).map(([lang, percentage]) => (
-                        <Box key={lang} w="100%">
-                          <Flex justify="space-between" mb={1}>
-                            <Text fontSize="sm">{lang}</Text>
-                            <Text fontSize="sm">{percentage}%</Text>
-                          </Flex>
-                          <Progress value={percentage} size="sm" colorScheme="brand" borderRadius="md" />
-                        </Box>
-                      ))}
-                    </VStack>
+              {repository ? (
+                <Stack spacing={4}>
+                  <Box>
+                    <Heading size="sm" mb={2}>Repository Details</Heading>
+                    <Stack spacing={2}>
+                      <HStack>
+                        <Text fontWeight="bold" width="150px">Full Name:</Text>
+                        <Text>{repository.fullName}</Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="bold" width="150px">Default Branch:</Text>
+                        <Text>{repository.defaultBranch}</Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="bold" width="150px">Language:</Text>
+                        <Text>{repository.language}</Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="bold" width="150px">Size:</Text>
+                        <Text>{repository.size ? `${(repository.size / 1024).toFixed(2)} MB` : 'Unknown'}</Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="bold" width="150px">GitHub URL:</Text>
+                        <Text color="blue.500" as="a" href={repository.url} target="_blank" rel="noopener noreferrer">
+                          {repository.url}
+                        </Text>
+                      </HStack>
+                    </Stack>
                   </Box>
-                </VStack>
-              </Box>
+                </Stack>
+              ) : (
+                <Text>Loading repository information...</Text>
+              )}
             </TabPanel>
           </TabPanels>
         </Tabs>

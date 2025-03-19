@@ -28,25 +28,6 @@ codeinsight/
 └── docker/      # Docker configuration
 ```
 
-## Getting Started
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Set up environment variables:
-```bash
-# Create .env files in client/ and server/ directories
-cp client/.env.example client/.env
-cp server/.env.example server/.env
-```
-
-3. Start development servers:
-```bash
-npm run dev
-```
-
 ## Development Guidelines
 
 - Follow TypeScript best practices and maintain strict type safety

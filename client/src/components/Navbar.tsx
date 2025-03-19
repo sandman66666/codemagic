@@ -30,6 +30,7 @@ import {
   ChevronRightIcon,
 } from '@chakra-ui/icons';
 import { useAuth } from '../contexts/AuthContext';
+import ColorModeToggle from './ColorModeToggle';
 
 const Navbar: React.FC = () => {
   const { isOpen, onToggle } = useDisclosure();
@@ -86,7 +87,10 @@ const Navbar: React.FC = () => {
           justify={'flex-end'}
           direction={'row'}
           spacing={6}
+          align={'center'}
         >
+          <ColorModeToggle />
+          
           {isAuthenticated ? (
             <Menu>
               <MenuButton
@@ -140,7 +144,11 @@ const DesktopNav = () => {
   const popoverContentBgColor = useColorModeValue('white', 'gray.800');
   const { isAuthenticated } = useAuth();
 
-  const NAV_ITEMS = isAuthenticated 
+  interface NavItemWithChildren extends NavItem {
+    children?: Array<NavItem>;
+  }
+
+  const NAV_ITEMS: Array<NavItemWithChildren> = isAuthenticated 
     ? [
         {
           label: 'Dashboard',
@@ -197,7 +205,7 @@ const DesktopNav = () => {
                 minW={'sm'}
               >
                 <Stack>
-                  {navItem.children.map((child) => (
+                  {navItem.children.map((child: NavItem) => (
                     <DesktopSubNav key={child.label} {...child} />
                   ))}
                 </Stack>
@@ -335,7 +343,7 @@ const MobileNavItem = ({ label, children, href }: NavItem) => {
           align={'start'}
         >
           {children &&
-            children.map((child) => (
+            children.map((child: NavItem) => (
               <Link key={child.label} py={2} href={child.href}>
                 {child.label}
               </Link>

@@ -26,11 +26,24 @@ const analysisRateLimiter = rateLimiter({
 });
 
 // Stricter rate limiter for starting new analyses (resource intensive)
+// Use a more lenient limit in development mode
+const isDevelopment = process.env.NODE_ENV !== 'production';
 const startAnalysisRateLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Limit each IP to 10 requests per hour
+  max: isDevelopment ? 1000 : 10, // Higher limit in development mode
   message: 'Too many analysis requests, please try again later',
 });
+
+// @route   POST /api/analyses
+// @desc    Start a new analysis (root endpoint for client compatibility)
+// @access  Private
+router.post(
+  '/', 
+  auth, 
+  startAnalysisRateLimiter,
+  validate(startAnalysisValidator),
+  startAnalysis
+);
 
 // @route   GET /api/analysis
 // @desc    Get all analyses for the authenticated user

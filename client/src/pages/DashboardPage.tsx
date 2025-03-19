@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -19,58 +19,12 @@ import {
   Divider,
   SimpleGrid,
   Skeleton,
+  useToast,
 } from '@chakra-ui/react';
-import { FiSearch, FiGithub, FiClock, FiStar, FiCode, FiLock } from 'react-icons/fi';
+import { FiSearch, FiGithub, FiClock, FiStar, FiCode, FiLock, FiRefreshCw } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { Navigate, Link as RouterLink } from 'react-router-dom';
-
-// Mock data for repositories
-const mockRepositories = [
-  {
-    id: '1',
-    name: 'project-alpha',
-    description: 'A scalable React application with TypeScript',
-    language: 'TypeScript',
-    stars: 42,
-    private: false,
-    lastUpdated: '2 days ago',
-    owner: {
-      login: 'johndoe',
-      avatarUrl: 'https://avatars.githubusercontent.com/u/1234567',
-    },
-  },
-  {
-    id: '2',
-    name: 'api-service',
-    description: 'RESTful API service with Express and MongoDB',
-    language: 'JavaScript',
-    stars: 28,
-    private: true,
-    lastUpdated: '1 week ago',
-    owner: {
-      login: 'johndoe',
-      avatarUrl: 'https://avatars.githubusercontent.com/u/1234567',
-    },
-  },
-];
-
-// Mock data for recent analyses
-const mockRecentAnalyses = [
-  {
-    id: '101',
-    repositoryName: 'project-alpha',
-    date: '2025-03-15',
-    summary: 'Security analysis detected 3 vulnerabilities',
-    status: 'Completed',
-  },
-  {
-    id: '102',
-    repositoryName: 'api-service',
-    date: '2025-03-10',
-    summary: 'Code quality improvements suggested',
-    status: 'Completed',
-  },
-];
+import { repositoryApi, analysisApi } from '../services/api';
 
 const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
   return (
@@ -89,8 +43,8 @@ const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
             {repo.name}
           </Text>
         </HStack>
-        <Badge colorScheme={repo.private ? 'red' : 'green'}>
-          {repo.private ? 'Private' : 'Public'}
+        <Badge colorScheme={repo.isPrivate ? 'red' : 'green'}>
+          {repo.isPrivate ? 'Private' : 'Public'}
         </Badge>
       </HStack>
       
@@ -100,8 +54,8 @@ const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
       
       <HStack justify="space-between">
         <HStack>
-          <Avatar size="xs" src={repo.owner.avatarUrl} />
-          <Text fontSize="sm">{repo.owner.login}</Text>
+          <Avatar size="xs" src={repo.owner?.avatarUrl || ''} />
+          <Text fontSize="sm">{repo.fullName?.split('/')[0] || ''}</Text>
         </HStack>
         <HStack spacing={4}>
           <HStack>
@@ -114,7 +68,7 @@ const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
           </HStack>
           <HStack>
             <FiClock />
-            <Text fontSize="sm">{repo.lastUpdated}</Text>
+            <Text fontSize="sm">{new Date(repo.updatedAt).toLocaleDateString()}</Text>
           </HStack>
         </HStack>
       </HStack>
@@ -123,7 +77,7 @@ const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
       
       <Button
         as={RouterLink}
-        to={`/repository/${repo.id}`}
+        to={`/repository/${repo._id}`}
         colorScheme="brand"
         size="sm"
         width="full"
@@ -144,19 +98,21 @@ const AnalysisCard: React.FC<{ analysis: any }> = ({ analysis }) => {
       bg={useColorModeValue('white', 'gray.700')}
     >
       <HStack justify="space-between" mb={2}>
-        <Text fontWeight="bold">{analysis.repositoryName}</Text>
-        <Badge colorScheme="green">{analysis.status}</Badge>
+        <Text fontWeight="bold">{analysis.repository?.name || 'Repository'}</Text>
+        <Badge colorScheme={analysis.status === 'completed' ? 'green' : 'yellow'}>
+          {analysis.status}
+        </Badge>
       </HStack>
       <Text fontSize="sm" color="gray.600" mb={2}>
-        {analysis.summary}
+        {analysis.summary?.overview || 'Analysis in progress...'}
       </Text>
       <HStack justify="space-between">
         <Text fontSize="xs" color="gray.500">
-          {analysis.date}
+          {new Date(analysis.createdAt).toLocaleDateString()}
         </Text>
         <Button
           as={RouterLink}
-          to={`/analysis/${analysis.id}`}
+          to={`/analysis/${analysis._id}`}
           size="xs"
           colorScheme="brand"
           variant="outline"
@@ -171,15 +127,75 @@ const AnalysisCard: React.FC<{ analysis: any }> = ({ analysis }) => {
 const DashboardPage: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [repositories, setRepositories] = useState<any[]>([]);
+  const [analyses, setAnalyses] = useState<any[]>([]);
+  const [syncingRepos, setSyncingRepos] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch repositories
+        const reposResponse = await repositoryApi.getUserRepositories();
+        setRepositories(reposResponse.data);
+        
+        // Fetch recent analyses
+        const analysesResponse = await analysisApi.getUserAnalyses();
+        setAnalyses(analysesResponse.data);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        toast({
+          title: 'Error fetching data',
+          description: 'There was an error loading your dashboard data.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isAuthenticated) {
+      fetchData();
+    }
+  }, [isAuthenticated, toast]);
+
+  const handleSyncRepositories = async () => {
+    setSyncingRepos(true);
+    try {
+      const response = await repositoryApi.syncRepositories();
+      setRepositories(response.data);
+      toast({
+        title: 'Repositories synced',
+        description: `Successfully synced ${response.data.length} repositories from GitHub.`,
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error syncing repositories:', error);
+      toast({
+        title: 'Sync failed',
+        description: 'There was an error syncing your repositories from GitHub.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setSyncingRepos(false);
+    }
+  };
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
 
-  const filteredRepos = mockRepositories.filter(repo => 
+  const filteredRepos = repositories.filter(repo => 
     repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    repo.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (repo.description && repo.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -193,7 +209,18 @@ const DashboardPage: React.FC = () => {
         </Flex>
 
         <Box>
-          <Heading size="md" mb={4}>Your Repositories</Heading>
+          <Flex justify="space-between" align="center" mb={4}>
+            <Heading size="md">Your Repositories</Heading>
+            <Button 
+              leftIcon={<FiRefreshCw />} 
+              colorScheme="brand" 
+              size="sm"
+              isLoading={syncingRepos}
+              onClick={handleSyncRepositories}
+            >
+              Sync Repositories
+            </Button>
+          </Flex>
           <InputGroup mb={4}>
             <InputLeftElement pointerEvents="none">
               <FiSearch color="gray.300" />
@@ -204,34 +231,63 @@ const DashboardPage: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </InputGroup>
-
+          
           {loading ? (
             <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
               {[1, 2, 3].map((i) => (
-                <Box key={i} p={5} shadow="md" borderWidth="1px">
-                  <Skeleton height="20px" mb={4} />
-                  <Skeleton height="12px" mb={2} />
-                  <Skeleton height="12px" mb={2} />
-                  <Skeleton height="36px" mt={4} />
+                <Box key={i} p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+                  <Skeleton height="24px" width="60%" mb={4} />
+                  <Skeleton height="16px" mb={2} />
+                  <Skeleton height="16px" mb={4} />
+                  <Skeleton height="24px" mb={2} />
+                  <Skeleton height="40px" mt={4} />
                 </Box>
               ))}
             </SimpleGrid>
-          ) : (
+          ) : filteredRepos.length > 0 ? (
             <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-              {filteredRepos.map(repo => (
-                <RepositoryCard key={repo.id} repo={repo} />
+              {filteredRepos.map((repo) => (
+                <RepositoryCard key={repo._id} repo={repo} />
               ))}
             </SimpleGrid>
+          ) : (
+            <VStack spacing={4} p={5} borderWidth="1px" borderRadius="lg" align="center">
+              <Text>No repositories found.</Text>
+              <Button 
+                leftIcon={<FiGithub />} 
+                colorScheme="brand"
+                onClick={handleSyncRepositories}
+                isLoading={syncingRepos}
+              >
+                Sync GitHub Repositories
+              </Button>
+            </VStack>
           )}
         </Box>
 
         <Box>
           <Heading size="md" mb={4}>Recent Analyses</Heading>
-          <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
-            {mockRecentAnalyses.map(analysis => (
-              <AnalysisCard key={analysis.id} analysis={analysis} />
-            ))}
-          </SimpleGrid>
+          {loading ? (
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              {[1, 2].map((i) => (
+                <Box key={i} p={4} shadow="sm" borderWidth="1px" borderRadius="md">
+                  <Skeleton height="20px" width="60%" mb={3} />
+                  <Skeleton height="14px" mb={2} />
+                  <Skeleton height="30px" mt={3} />
+                </Box>
+              ))}
+            </SimpleGrid>
+          ) : analyses.length > 0 ? (
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              {analyses.slice(0, 4).map((analysis) => (
+                <AnalysisCard key={analysis._id} analysis={analysis} />
+              ))}
+            </SimpleGrid>
+          ) : (
+            <Box p={5} borderWidth="1px" borderRadius="lg" textAlign="center">
+              <Text>No recent analyses found. Analyze a repository to get started.</Text>
+            </Box>
+          )}
         </Box>
       </Stack>
     </Container>

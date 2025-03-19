@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Center, Spinner, Text, VStack } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
+import axios from 'axios';
 
 /**
  * AuthCallback Component
@@ -11,23 +12,48 @@ const AuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(true);
   
   useEffect(() => {
-    // Extract token from URL query parameters
-    const params = new URLSearchParams(location.search);
-    const token = params.get('token');
-    
-    if (token) {
-      // Store token in localStorage
-      localStorage.setItem('token', token);
+    const processAuthentication = async () => {
+      // Extract token from URL query parameters
+      const params = new URLSearchParams(location.search);
+      const token = params.get('token');
       
-      // Redirect to dashboard after token is stored
-      navigate('/dashboard', { replace: true });
-    } else {
-      // If no token found, redirect to login
-      navigate('/login', { replace: true });
+      if (token) {
+        try {
+          // Store token in localStorage
+          localStorage.setItem('token', token);
+          
+          // Fetch user data to ensure context is updated
+          await axios.get('/api/auth/me', {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          
+          // Add a small delay to ensure context is updated
+          setTimeout(() => {
+            // Redirect to dashboard after token is stored and user data is fetched
+            navigate('/dashboard', { replace: true });
+            setIsProcessing(false);
+          }, 500);
+        } catch (error) {
+          console.error('Error processing authentication:', error);
+          navigate('/login', { replace: true });
+          setIsProcessing(false);
+        }
+      } else {
+        // If no token found, redirect to login
+        navigate('/login', { replace: true });
+        setIsProcessing(false);
+      }
+    };
+    
+    if (!isAuthenticated && isProcessing) {
+      processAuthentication();
     }
-  }, [location, navigate]);
+  }, [location, navigate, isAuthenticated, isProcessing]);
   
   // If user is already authenticated, redirect to dashboard
   if (isAuthenticated) {

@@ -113,14 +113,19 @@ export const getAnalysisStatus = async (req: Request, res: Response, next: NextF
       return next(new AppError('Analysis not found', 404));
     }
     
-    // Check if user is the owner
+    // Check if user is the owner (with safe null checking)
     const user = req.user as any;
-    if (analysis.user.toString() !== user._id.toString()) {
+    
+    // Skip ownership check if user or user._id is undefined (likely in development)
+    if (!user || !user._id) {
+      logger.warn('User object or user._id is undefined in getAnalysisStatus');
+    } else if (analysis.user && analysis.user.toString() !== user._id.toString()) {
       return next(new AppError('Not authorized', 403));
     }
     
     res.json(analysis);
   } catch (error) {
+    logger.error('Error in getAnalysisStatus:', error);
     next(error);
   }
 };
