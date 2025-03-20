@@ -107,7 +107,7 @@ export const getAnalysisById = async (req: Request, res: Response, next: NextFun
  */
 export const getAnalysisStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const analysis = await Analysis.findById(req.params.id).select('status startedAt completedAt');
+    const analysis = await Analysis.findById(req.params.id).select('status startedAt completedAt user');
     
     if (!analysis) {
       return next(new AppError('Analysis not found', 404));
