@@ -36,6 +36,7 @@ app.use(passport.initialize());
 app.use('/api/auth', authRoutes);
 app.use('/api/repositories', repositoryRoutes);
 app.use('/api/analyses', analysisRoutes);
+app.use('/api/analysis', analysisRoutes); // Add alias route to match frontend URL
 app.use('/api/users', userRoutes);
 
 // Serve static assets in production

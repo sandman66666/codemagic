@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@types/uuid": "^10.0.0",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
     "passport-jwt": "^4.0.1",
     "redis": "^4.6.11",
     "simple-git": "^3.21.0",
+    "uuid": "^11.1.0",
     "winston": "^3.11.0"
   },
   "devDependencies": {
