@@ -7,14 +7,12 @@ import {
   Heading,
   Text,
   Stack,
-  Image,
   Flex,
   Icon,
   SimpleGrid,
   useColorModeValue,
   Input,
   FormControl,
-  FormLabel,
   FormHelperText,
   Alert,
   AlertIcon,
@@ -25,9 +23,9 @@ import {
   TabPanel,
   useToast,
   Spinner,
-  Code,
   IconButton,
   Tooltip,
+  VStack,
 } from '@chakra-ui/react';
 import { FiCode, FiShield, FiBarChart2, FiCopy, FiGithub } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
@@ -65,29 +63,34 @@ const HomePage: React.FC = () => {
     content: string;
   } | null>(null);
   const toast = useToast();
-  
+
   const handleRepositoryUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRepositoryUrl(e.target.value);
   };
-  
+
+  const handleGitHubAuth = () => {
+    // Redirect to GitHub auth endpoint
+    window.location.href = '/api/auth/github';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate GitHub URL format
     const githubUrlRegex = /^https:\/\/github\.com\/[^\/]+\/[^\/]+/;
     if (!githubUrlRegex.test(repositoryUrl)) {
       setError('Please enter a valid GitHub repository URL (e.g., https://github.com/username/repository)');
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await axios.post('/api/analysis/public/ingest', {
         repositoryUrl,
       });
-      
+
       setResult(response.data.content);
       toast({
         title: 'Repository processed successfully',
@@ -95,17 +98,17 @@ const HomePage: React.FC = () => {
         duration: 3000,
         isClosable: true,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing repository:', error);
       setError(
-        error.response?.data?.message || 
+        error.response?.data?.message ||
         'Failed to process repository. Please check the URL and try again.'
       );
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -115,17 +118,13 @@ const HomePage: React.FC = () => {
       isClosable: true,
     });
   };
-  
+
   return (
-    <Box>
-      <Container maxW={'7xl'}>
-        <Stack
-          align={'center'}
-          spacing={{ base: 8, md: 10 }}
-          py={{ base: 20, md: 28 }}
-          direction={{ base: 'column', md: 'row' }}
-        >
-          <Stack flex={1} spacing={{ base: 5, md: 10 }}>
+    <Box bg={useColorModeValue('gray.50', 'gray.900')} minH="100vh">
+      <Container maxW={'4xl'} pt={10} pb={10}>
+        <VStack spacing={10}>
+          {/* Hero Section */}
+          <VStack textAlign="center" spacing={6}>
             <Heading
               lineHeight={1.1}
               fontWeight={600}
@@ -152,139 +151,148 @@ const HomePage: React.FC = () => {
                 with AI assistance
               </Text>
             </Heading>
-            <Text color={'gray.500'}>
+            <Text
+              color={'gray.500'}
+              maxW={'2xl'}
+              fontSize={{ base: 'md', md: 'lg' }}
+            >
               CodeInsight enhances code understanding by leveraging AI to analyze GitHub repositories.
               Get intelligent code analysis, vulnerability scanning, and interactive visualizations for your
               codebase.
             </Text>
-            <Stack
-              spacing={{ base: 4, sm: 6 }}
-              direction={{ base: 'column', sm: 'row' }}
-            >
-              <Button
-                as={RouterLink}
-                to={isAuthenticated ? '/dashboard' : '/login'}
-                rounded={'full'}
-                size={'lg'}
-                fontWeight={'normal'}
-                px={6}
-                colorScheme={'brand'}
-                bg={'brand.500'}
-                _hover={{ bg: 'brand.600' }}
-              >
-                {isAuthenticated ? 'Go to Dashboard' : 'Get Started'}
-              </Button>
-              <Button
-                as={RouterLink}
-                to={'/#features'}
-                rounded={'full'}
-                size={'lg'}
-                fontWeight={'normal'}
-                px={6}
-                leftIcon={<FiCode />}
-              >
-                Learn more
-              </Button>
-            </Stack>
-          </Stack>
-          <Flex
-            flex={1}
-            justify={'center'}
-            align={'center'}
-            position={'relative'}
-            w={'full'}
-          >
-            <Box
-              position={'relative'}
-              height={'300px'}
-              rounded={'2xl'}
-              boxShadow={'2xl'}
-              width={'full'}
-              overflow={'hidden'}
-            >
-              <Image
-                alt={'Hero Image'}
-                fit={'cover'}
-                align={'center'}
-                w={'100%'}
-                h={'100%'}
-                src={
-                  'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1169&q=80'
-                }
-              />
-            </Box>
-          </Flex>
-        </Stack>
+          </VStack>
 
-        {/* GitHub Repository Analysis Section */}
-        <Box 
-          p={8} 
-          mb={10}
-          borderRadius="lg" 
-          bg={useColorModeValue('white', 'gray.700')}
-          boxShadow="xl"
-        >
-          <Heading as="h2" size="xl" mb={6} textAlign="center">
-            Analyze Any GitHub Repository
-          </Heading>
-          <Text mb={6} textAlign="center">
-            Enter a GitHub repository URL to get a detailed analysis of the codebase.
-            No login required!
-          </Text>
-          
-          <form onSubmit={handleSubmit}>
-            <FormControl mb={4}>
-              <FormLabel htmlFor="repositoryUrl">GitHub Repository URL</FormLabel>
-              <Flex>
-                <Input
-                  id="repositoryUrl"
-                  placeholder="https://github.com/username/repository"
-                  value={repositoryUrl}
-                  onChange={handleRepositoryUrlChange}
-                  isDisabled={isLoading}
-                  pr="4.5rem"
-                  flex="1"
-                />
-                <Button
-                  ml={2}
-                  colorScheme="brand"
-                  isLoading={isLoading}
-                  type="submit"
-                  leftIcon={<FiGithub />}
-                >
-                  Analyze
-                </Button>
-              </Flex>
-              <FormHelperText>
-                Example: https://github.com/facebook/react
-              </FormHelperText>
-            </FormControl>
-          </form>
-          
-          {error && (
-            <Alert status="error" mt={4} borderRadius="md">
-              <AlertIcon />
-              {error}
-            </Alert>
-          )}
-          
+          {/* Repository Entry Form */}
+          <Box
+            w="full"
+            p={6}
+            borderRadius="lg"
+            bg={useColorModeValue('white', 'gray.700')}
+            boxShadow="md"
+          >
+            <VStack spacing={4}>
+              <Heading as="h2" size="md" textAlign="center">
+                Enter a GitHub Repository URL to Analyze
+              </Heading>
+              
+              <form onSubmit={handleSubmit} style={{ width: '100%' }}>
+                <VStack spacing={3}>
+                  <FormControl>
+                    <Input
+                      id="repositoryUrl"
+                      placeholder="https://github.com/username/repository"
+                      value={repositoryUrl}
+                      onChange={handleRepositoryUrlChange}
+                      isDisabled={isLoading}
+                      size="lg"
+                    />
+                    <FormHelperText>
+                      Example: https://github.com/facebook/react
+                    </FormHelperText>
+                  </FormControl>
+                  
+                  <Flex w="full" justify="center" gap={3}>
+                    <Button
+                      colorScheme="brand"
+                      isLoading={isLoading}
+                      type="submit"
+                      leftIcon={<FiGithub />}
+                      size="md"
+                      width={{ base: 'full', md: 'auto' }}
+                    >
+                      Analyze Repository
+                    </Button>
+                    
+                    {!isAuthenticated && (
+                      <Button
+                        colorScheme="gray"
+                        onClick={handleGitHubAuth}
+                        leftIcon={<FiGithub />}
+                        size="md"
+                        width={{ base: 'full', md: 'auto' }}
+                      >
+                        Continue with GitHub
+                      </Button>
+                    )}
+                    
+                    {isAuthenticated && (
+                      <Button
+                        as={RouterLink}
+                        to="/dashboard"
+                        colorScheme="gray"
+                        leftIcon={<FiCode />}
+                        size="md"
+                        width={{ base: 'full', md: 'auto' }}
+                      >
+                        My Repositories
+                      </Button>
+                    )}
+                  </Flex>
+                </VStack>
+              </form>
+              
+              {error && (
+                <Alert status="error" mt={4} borderRadius="md">
+                  <AlertIcon />
+                  {error}
+                </Alert>
+              )}
+            </VStack>
+          </Box>
+
+          {/* Loading Section */}
           {isLoading && (
-            <Flex justify="center" align="center" direction="column" my={10}>
+            <Box textAlign="center" py={6}>
               <Spinner size="xl" mb={4} color="brand.500" />
               <Text>Processing repository... This may take a few minutes for large repositories.</Text>
-            </Flex>
+            </Box>
           )}
-          
+
+          {/* Results Section */}
           {result && (
-            <Box mt={6}>
-              <Tabs colorScheme="brand" variant="enclosed">
+            <Box
+              w="full"
+              p={6}
+              borderRadius="lg"
+              bg={useColorModeValue('white', 'gray.700')}
+              boxShadow="md"
+            >
+              <Heading as="h3" size="md" mb={4} textAlign="center">
+                Analysis Results
+              </Heading>
+              
+              <Tabs colorScheme="brand" variant="enclosed" isFitted>
                 <TabList>
+                  <Tab>Content</Tab>
                   <Tab>Summary</Tab>
                   <Tab>File Tree</Tab>
-                  <Tab>Content</Tab>
                 </TabList>
                 
                 <TabPanels>
+                  <TabPanel>
+                    <Flex justify="flex-end" mb={2}>
+                      <Tooltip label="Copy to clipboard">
+                        <IconButton
+                          aria-label="Copy content"
+                          icon={<FiCopy />}
+                          size="sm"
+                          onClick={() => copyToClipboard(result.content, 'Content')}
+                        />
+                      </Tooltip>
+                    </Flex>
+                    <Box
+                      p={4}
+                      borderRadius="md"
+                      bg={useColorModeValue('gray.50', 'gray.800')}
+                      overflowY="auto"
+                      maxHeight="500px"
+                      whiteSpace="pre-wrap"
+                      fontFamily="monospace"
+                    >
+                      {result.content}
+                    </Box>
+                  </TabPanel>
+                  
                   <TabPanel>
                     <Flex justify="flex-end" mb={2}>
                       <Tooltip label="Copy to clipboard">
@@ -332,64 +340,36 @@ const HomePage: React.FC = () => {
                       {result.tree}
                     </Box>
                   </TabPanel>
-                  
-                  <TabPanel>
-                    <Flex justify="flex-end" mb={2}>
-                      <Tooltip label="Copy to clipboard">
-                        <IconButton
-                          aria-label="Copy content"
-                          icon={<FiCopy />}
-                          size="sm"
-                          onClick={() => copyToClipboard(result.content, 'Content')}
-                        />
-                      </Tooltip>
-                    </Flex>
-                    <Box
-                      p={4}
-                      borderRadius="md"
-                      bg={useColorModeValue('gray.50', 'gray.800')}
-                      overflowY="auto"
-                      maxHeight="500px"
-                      whiteSpace="pre-wrap"
-                      fontFamily="monospace"
-                    >
-                      {result.content}
-                    </Box>
-                  </TabPanel>
                 </TabPanels>
               </Tabs>
             </Box>
           )}
-        </Box>
 
-        <Box p={4} id="features">
-          <Stack spacing={4} as={Container} maxW={'3xl'} textAlign={'center'}>
-            <Heading fontSize={'3xl'}>Features</Heading>
-            <Text color={'gray.600'} fontSize={'xl'}>
-              Powerful tools for developers to understand, analyze, and improve their code
-            </Text>
-          </Stack>
-
-          <Container maxW={'6xl'} mt={10}>
-            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={10}>
-              <Feature
-                icon={<Icon as={FiCode} w={10} h={10} />}
-                title={'Code Analysis'}
-                text={'AI-powered code review that identifies patterns, best practices, and issues.'}
-              />
-              <Feature
-                icon={<Icon as={FiShield} w={10} h={10} />}
-                title={'Security Scanning'}
-                text={'Detect security vulnerabilities in your codebase before they become a problem.'}
-              />
-              <Feature
-                icon={<Icon as={FiBarChart2} w={10} h={10} />}
-                title={'Interactive Visualizations'}
-                text={'Explore your codebase with intuitive visualizations that show dependencies and structure.'}
-              />
-            </SimpleGrid>
-          </Container>
-        </Box>
+          {/* Features Section */}
+          <Box id="features" w="full">
+            <VStack spacing={6} textAlign="center">
+              <Heading fontSize={'2xl'}>Features</Heading>
+              
+              <SimpleGrid columns={{ base: 1, md: 3 }} spacing={10} w="full">
+                <Feature
+                  icon={<Icon as={FiCode} w={8} h={8} />}
+                  title={'Code Analysis'}
+                  text={'AI-powered code review that identifies patterns and issues.'}
+                />
+                <Feature
+                  icon={<Icon as={FiShield} w={8} h={8} />}
+                  title={'Security Scanning'}
+                  text={'Detect security vulnerabilities in your codebase.'}
+                />
+                <Feature
+                  icon={<Icon as={FiBarChart2} w={8} h={8} />}
+                  title={'Visualizations'}
+                  text={'Explore your codebase with intuitive visualizations.'}
+                />
+              </SimpleGrid>
+            </VStack>
+          </Box>
+        </VStack>
       </Container>
     </Box>
   );

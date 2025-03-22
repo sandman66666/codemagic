@@ -40,8 +40,10 @@ import {
   AccordionButton,
   AccordionPanel,
   AccordionIcon,
+  IconButton,
+  Tooltip,
 } from '@chakra-ui/react';
-import { FiGithub, FiCode, FiLock, FiStar, FiCalendar, FiFilter, FiFolder, FiFile } from 'react-icons/fi';
+import { FiGithub, FiCode, FiLock, FiStar, FiCalendar, FiFilter, FiFolder, FiFile, FiCopy } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { repositoryApi, analysisApi } from '../services/api';
 
@@ -106,6 +108,31 @@ const RepositoryPage: React.FC = () => {
           if (processedResponse.data.processed) {
             // Fetch ingest data if repository has been processed
             await fetchIngestData();
+          } else {
+            // Automatically process repository structure if not already processed
+            setProcessingIngest(true);
+            try {
+              await repositoryApi.processRepositoryWithIngest(repoResponse.data._id);
+              await fetchIngestData();
+              toast({
+                title: 'Repository structure generated',
+                description: 'Repository structure data has been automatically generated.',
+                status: 'success',
+                duration: 5000,
+                isClosable: true,
+              });
+            } catch (error) {
+              console.error('Error auto-processing repository:', error);
+              toast({
+                title: 'Auto-processing failed',
+                description: 'There was an error automatically processing the repository structure.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+              });
+            } finally {
+              setProcessingIngest(false);
+            }
           }
         } catch (error) {
           console.error('Error checking repository ingest status:', error);
@@ -182,6 +209,17 @@ const RepositoryPage: React.FC = () => {
     } finally {
       setProcessingIngest(false);
     }
+  };
+
+  // Function to copy content to clipboard
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: `${type} copied to clipboard`,
+      status: 'success',
+      duration: 2000,
+      isClosable: true,
+    });
   };
 
   // Start analysis function
@@ -365,11 +403,135 @@ const RepositoryPage: React.FC = () => {
         
         <Tabs variant="enclosed" colorScheme="brand">
           <TabList>
+            <Tab>Repository Structure</Tab>
             <Tab>Analysis Settings</Tab>
             <Tab>Repository Info</Tab>
-            <Tab>Repository Structure</Tab>
           </TabList>
           <TabPanels>
+            {/* Repository Structure Tab */}
+            <TabPanel>
+              {loadingIngestData ? (
+                <Stack spacing={4}>
+                  <Skeleton height="30px" width="60%" />
+                  <Skeleton height="20px" width="100%" />
+                  <Skeleton height="20px" width="90%" />
+                  <Skeleton height="20px" width="95%" />
+                  <Skeleton height="20px" width="85%" />
+                  <Skeleton height="20px" width="80%" />
+                </Stack>
+              ) : isRepositoryProcessed || processingIngest ? (
+                <Box
+                  w="full"
+                  p={6}
+                  borderRadius="lg"
+                  bg={useColorModeValue('white', 'gray.700')}
+                  boxShadow="md"
+                >
+                  <Heading as="h3" size="md" mb={4} textAlign="center">
+                    Repository Structure Analysis
+                  </Heading>
+                  
+                  <Tabs colorScheme="brand" variant="enclosed" isFitted>
+                    <TabList>
+                      <Tab>Content</Tab>
+                      <Tab>Summary</Tab>
+                      <Tab>File Tree</Tab>
+                    </TabList>
+                    
+                    <TabPanels>
+                      <TabPanel>
+                        <Flex justify="flex-end" mb={2}>
+                          <Tooltip label="Copy to clipboard">
+                            <IconButton
+                              aria-label="Copy content"
+                              icon={<FiCopy />}
+                              size="sm"
+                              onClick={() => copyToClipboard(ingestData.content, 'Content')}
+                            />
+                          </Tooltip>
+                        </Flex>
+                        <Box
+                          p={4}
+                          borderRadius="md"
+                          bg={useColorModeValue('gray.50', 'gray.800')}
+                          overflowY="auto"
+                          maxHeight="500px"
+                          whiteSpace="pre-wrap"
+                          fontFamily="monospace"
+                        >
+                          {ingestData.content}
+                        </Box>
+                      </TabPanel>
+                      
+                      <TabPanel>
+                        <Flex justify="flex-end" mb={2}>
+                          <Tooltip label="Copy to clipboard">
+                            <IconButton
+                              aria-label="Copy summary"
+                              icon={<FiCopy />}
+                              size="sm"
+                              onClick={() => copyToClipboard(ingestData.summary, 'Summary')}
+                            />
+                          </Tooltip>
+                        </Flex>
+                        <Box
+                          p={4}
+                          borderRadius="md"
+                          bg={useColorModeValue('gray.50', 'gray.800')}
+                          overflowY="auto"
+                          maxHeight="500px"
+                          whiteSpace="pre-wrap"
+                          fontFamily="monospace"
+                        >
+                          {ingestData.summary}
+                        </Box>
+                      </TabPanel>
+                      
+                      <TabPanel>
+                        <Flex justify="flex-end" mb={2}>
+                          <Tooltip label="Copy to clipboard">
+                            <IconButton
+                              aria-label="Copy file tree"
+                              icon={<FiCopy />}
+                              size="sm"
+                              onClick={() => copyToClipboard(ingestData.tree, 'File Tree')}
+                            />
+                          </Tooltip>
+                        </Flex>
+                        <Box
+                          p={4}
+                          borderRadius="md"
+                          bg={useColorModeValue('gray.50', 'gray.800')}
+                          overflowY="auto"
+                          maxHeight="500px"
+                          whiteSpace="pre-wrap"
+                          fontFamily="monospace"
+                        >
+                          {ingestData.tree}
+                        </Box>
+                      </TabPanel>
+                    </TabPanels>
+                  </Tabs>
+                </Box>
+              ) : (
+                <Stack spacing={4} align="center">
+                  <Box 
+                    p={5} 
+                    textAlign="center" 
+                    borderWidth="1px" 
+                    borderRadius="lg" 
+                    width="100%"
+                  >
+                    <Heading size="md" mb={3}>Processing Repository Structure</Heading>
+                    <Text mb={5}>
+                      Automatically generating repository structure data. Please wait while we analyze the repository structure, summary, and contents.
+                    </Text>
+                    <Progress size="sm" isIndeterminate colorScheme="brand" />
+                  </Box>
+                </Stack>
+              )}
+            </TabPanel>
+            
             <TabPanel>
               <Stack spacing={6}>
                 <Box>
@@ -447,6 +609,7 @@ const RepositoryPage: React.FC = () => {
                 </Button>
               </Stack>
             </TabPanel>
+            
             <TabPanel>
               {repository ? (
                 <Stack spacing={4}>
@@ -480,95 +643,6 @@ const RepositoryPage: React.FC = () => {
                 </Stack>
               ) : (
                 <Text>Loading repository information...</Text>
-              )}
-            </TabPanel>
-
-            {/* Repository Structure Tab */}
-            <TabPanel>
-              {loadingIngestData ? (
-                <Stack spacing={4}>
-                  <Skeleton height="30px" width="60%" />
-                  <Skeleton height="20px" width="100%" />
-                  <Skeleton height="20px" width="90%" />
-                  <Skeleton height="20px" width="95%" />
-                  <Skeleton height="20px" width="85%" />
-                  <Skeleton height="20px" width="80%" />
-                </Stack>
-              ) : isRepositoryProcessed ? (
-                <Stack spacing={6}>
-                  {/* Repository Summary */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Repository Summary</Heading>
-                    <Box 
-                      p={4} 
-                      borderWidth="1px" 
-                      borderRadius="lg" 
-                      bg={useColorModeValue('gray.50', 'gray.700')}
-                    >
-                      <Text as="pre" fontFamily="monospace" whiteSpace="pre-wrap">
-                        {ingestData.summary}
-                      </Text>
-                    </Box>
-                  </Box>
-                  
-                  {/* Repository Structure */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Repository Structure</Heading>
-                    <Box 
-                      p={4} 
-                      borderWidth="1px" 
-                      borderRadius="lg" 
-                      bg={useColorModeValue('gray.50', 'gray.700')}
-                      maxH="400px"
-                      overflowY="auto"
-                    >
-                      <Text as="pre" fontFamily="monospace" whiteSpace="pre-wrap">
-                        {ingestData.tree}
-                      </Text>
-                    </Box>
-                  </Box>
-                  
-                  {/* Repository Content */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Repository Content</Heading>
-                    <Box 
-                      p={4} 
-                      borderWidth="1px" 
-                      borderRadius="lg" 
-                      bg={useColorModeValue('gray.50', 'gray.700')}
-                      maxH="500px"
-                      overflowY="auto"
-                    >
-                      <Text as="pre" fontFamily="monospace" whiteSpace="pre-wrap">
-                        {ingestData.content}
-                      </Text>
-                    </Box>
-                  </Box>
-                </Stack>
-              ) : (
-                <Stack spacing={4} align="center">
-                  <Box 
-                    p={5} 
-                    textAlign="center" 
-                    borderWidth="1px" 
-                    borderRadius="lg" 
-                    width="100%"
-                  >
-                    <Heading size="md" mb={3}>Repository Structure Data Not Available</Heading>
-                    <Text mb={5}>
-                      This repository hasn't been processed for structure analysis yet. Process it now to see detailed information about the repository structure, summary, and contents.
-                    </Text>
-                    <Button
-                      colorScheme="brand"
-                      onClick={processRepositoryIngest}
-                      isLoading={processingIngest}
-                      loadingText="Processing..."
-                      isDisabled={!repository || processingIngest}
-                    >
-                      Process Repository Structure
-                    </Button>
-                  </Box>
-                </Stack>
               )}
             </TabPanel>
           </TabPanels>
