@@ -9,6 +9,7 @@ import {
   compareAnalyses,
   processRepositoryWithGitIngest,
   getIngestedRepositoryContent,
+  checkRepositoryProcessed,
   processPublicRepositoryWithGitIngest
 } from '../controllers/analysisController';
 import { validate } from '../middleware/validation';
@@ -127,6 +128,15 @@ router.get(
   '/repository/:repositoryId/ingest/:contentType?',
   auth,
   getIngestedRepositoryContent
+);
+
+// @route   GET /api/analysis/repository/:repositoryId/processed
+// @desc    Check if repository has been processed with gitingest
+// @access  Private
+router.get(
+  '/repository/:repositoryId/processed',
+  auth,
+  checkRepositoryProcessed
 );
 
 // @route   POST /api/analysis/public/ingest

@@ -119,25 +119,61 @@ export const processRepositoryWithGitIngest = async (req: Request, res: Response
       return next(new AppError('Not authorized', 403));
     }
     
-    // Process the repository with gitingest
-    // We need to use the repository ID format that's created when cloned
-    // This typically includes the MongoDB ID and a timestamp
-    const repoFolders = fs.readdirSync(repositoryIngestService.tempDir);
     const repoId = (repository._id as Types.ObjectId).toString();
-    const repoFolder = repoFolders.find(folder => folder.startsWith(repoId));
+    let repoPath: string = '';
+    let temporaryRepoCreated = false;
     
-    if (!repoFolder) {
-      return next(new AppError('Repository not found in temp directory. It may need to be analyzed first.', 404));
+    try {
+      // First check if the repository already exists in temp directory
+      const repoFolders = fs.readdirSync(repositoryIngestService.tempDir);
+      const repoFolder = repoFolders.find(folder => folder.startsWith(repoId));
+      
+      if (repoFolder) {
+        // Repository folder exists, use it
+        repoPath = path.join(repositoryIngestService.tempDir, repoFolder);
+        logger.info(`Using existing repository folder: ${repoPath}`);
+      } else {
+        // Repository folder doesn't exist, clone it
+        temporaryRepoCreated = true;
+        repoPath = path.join(repositoryIngestService.tempDir, `${repoId}-${Date.now()}`);
+        logger.info(`Cloning repository to temporary folder: ${repoPath}`);
+        
+        // Clone the repository (similar to analyzeRepository)
+        const git: SimpleGit = simpleGit();
+        const cloneUrl = repository.cloneUrl.replace(
+          'https://',
+          `https://${user.githubToken}@`
+        );
+        
+        await git.clone(cloneUrl, repoPath);
+        
+        // Check out the default branch
+        const localGit = simpleGit(repoPath);
+        await localGit.checkout(repository.defaultBranch || 'main');
+      }
+      
+      // Process the repository with gitingest using the path
+      const result = await repositoryIngestService.processRepository(repoPath, repoId);
+      
+      // Clean up temporary repo if we created one
+      if (temporaryRepoCreated) {
+        await rimrafPromise(repoPath);
+      }
+      
+      res.json({
+        success: true,
+        message: 'Repository processed with gitingest',
+        result
+      });
+    } catch (error) {
+      // Clean up temporary repo if we created one and an error occurred
+      if (temporaryRepoCreated && repoPath && fs.existsSync(repoPath)) {
+        await rimrafPromise(repoPath);
+      }
+      throw error;
     }
-    
-    const result = await repositoryIngestService.processRepository(repoFolder, repoId);
-    
-    res.json({
-      success: true,
-      message: 'Repository processed with gitingest',
-      result
-    });
   } catch (error) {
+    logger.error(`Error processing repository with gitingest: ${error}`);
     next(error);
   }
 };
@@ -185,6 +221,39 @@ export const getIngestedRepositoryContent = async (req: Request, res: Response, 
       // Return all content
       res.json(content);
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Check if repository has been processed with gitingest
+ */
+export const checkRepositoryProcessed = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { repositoryId } = req.params;
+    
+    if (!repositoryId) {
+      return next(new AppError('Repository ID is required', 400));
+    }
+    
+    const user = req.user as any;
+    const repository = await Repository.findById(repositoryId);
+    
+    if (!repository) {
+      return next(new AppError('Repository not found', 404));
+    }
+    
+    // Check if user is the owner
+    if (repository.owner.toString() !== user._id.toString()) {
+      return next(new AppError('Not authorized', 403));
+    }
+    
+    // Check if repository has been processed with gitingest
+    const repoId = (repository._id as Types.ObjectId).toString();
+    const processed = repositoryIngestService.isRepositoryProcessed(repoId);
+    
+    res.json({ processed });
   } catch (error) {
     next(error);
   }

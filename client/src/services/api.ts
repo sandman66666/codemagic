@@ -25,6 +25,12 @@ export const repositoryApi = {
   syncRepositories: (force = false) => api.post('/repositories/sync', { force }),
   getRepositoryById: (id: string) => api.get(`/repositories/${id}`),
   getRepositoryBranches: (id: string) => api.get(`/repositories/${id}/branches`),
+  // Repository ingest related methods
+  checkRepositoryProcessed: (id: string) => api.get(`/analysis/repository/${id}/processed`),
+  getRepositoryIngestData: (id: string, contentType?: string) => 
+    api.get(`/analysis/repository/${id}/ingest/${contentType || ''}`),
+  processRepositoryWithIngest: (id: string) => 
+    api.post(`/analysis/repository/${id}/ingest`),
 };
 
 // Analysis API calls

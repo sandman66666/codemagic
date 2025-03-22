@@ -32,8 +32,16 @@ import {
   Select,
   Skeleton,
   useToast,
+  Code,
+  TabIndicator,
+  Tag,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
 } from '@chakra-ui/react';
-import { FiGithub, FiCode, FiLock, FiStar, FiCalendar, FiFilter } from 'react-icons/fi';
+import { FiGithub, FiCode, FiLock, FiStar, FiCalendar, FiFilter, FiFolder, FiFile } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { repositoryApi, analysisApi } from '../services/api';
 
@@ -56,6 +64,20 @@ const RepositoryPage: React.FC = () => {
     includeNodeModules: false,
     maxFileSize: '5',
   });
+  
+  // Repository ingest data states
+  const [isRepositoryProcessed, setIsRepositoryProcessed] = useState(false);
+  const [loadingIngestData, setLoadingIngestData] = useState(false);
+  const [processingIngest, setProcessingIngest] = useState(false);
+  const [ingestData, setIngestData] = useState<{
+    summary: string;
+    tree: string;
+    content: string;
+  }>({
+    summary: '',
+    tree: '',
+    content: '',
+  });
 
   useEffect(() => {
     const fetchRepositoryData = async () => {
@@ -75,6 +97,20 @@ const RepositoryPage: React.FC = () => {
         if (repoResponse.data.defaultBranch) {
           setSelectedBranch(repoResponse.data.defaultBranch);
         }
+
+        // Check if repository has been processed with ingest
+        try {
+          const processedResponse = await repositoryApi.checkRepositoryProcessed(repoId);
+          setIsRepositoryProcessed(processedResponse.data.processed);
+          
+          if (processedResponse.data.processed) {
+            // Fetch ingest data if repository has been processed
+            await fetchIngestData();
+          }
+        } catch (error) {
+          console.error('Error checking repository ingest status:', error);
+          setIsRepositoryProcessed(false);
+        }
       } catch (error) {
         console.error('Error fetching repository data:', error);
         toast({
@@ -91,6 +127,62 @@ const RepositoryPage: React.FC = () => {
 
     fetchRepositoryData();
   }, [repoId, isAuthenticated, toast]);
+
+  // Function to fetch repository ingest data
+  const fetchIngestData = async () => {
+    if (!repoId) return;
+    
+    setLoadingIngestData(true);
+    try {
+      // Fetch all ingest data
+      const ingestResponse = await repositoryApi.getRepositoryIngestData(repoId);
+      setIngestData(ingestResponse.data);
+      setIsRepositoryProcessed(true);
+    } catch (error) {
+      console.error('Error fetching repository ingest data:', error);
+      toast({
+        title: 'Error loading repository structure',
+        description: 'There was an error loading the repository structure data.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoadingIngestData(false);
+    }
+  };
+
+  // Function to process repository with ingest
+  const processRepositoryIngest = async () => {
+    if (!repository) return;
+    
+    setProcessingIngest(true);
+    try {
+      await repositoryApi.processRepositoryWithIngest(repository._id);
+      
+      // Fetch ingest data after processing
+      await fetchIngestData();
+      
+      toast({
+        title: 'Repository processed',
+        description: 'Repository structure data has been generated successfully.',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error processing repository:', error);
+      toast({
+        title: 'Processing failed',
+        description: 'There was an error processing the repository structure.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setProcessingIngest(false);
+    }
+  };
 
   // Start analysis function
   const startAnalysis = async () => {
@@ -275,6 +367,7 @@ const RepositoryPage: React.FC = () => {
           <TabList>
             <Tab>Analysis Settings</Tab>
             <Tab>Repository Info</Tab>
+            <Tab>Repository Structure</Tab>
           </TabList>
           <TabPanels>
             <TabPanel>
@@ -387,6 +480,95 @@ const RepositoryPage: React.FC = () => {
                 </Stack>
               ) : (
                 <Text>Loading repository information...</Text>
+              )}
+            </TabPanel>
+
+            {/* Repository Structure Tab */}
+            <TabPanel>
+              {loadingIngestData ? (
+                <Stack spacing={4}>
+                  <Skeleton height="30px" width="60%" />
+                  <Skeleton height="20px" width="100%" />
+                  <Skeleton height="20px" width="90%" />
+                  <Skeleton height="20px" width="95%" />
+                  <Skeleton height="20px" width="85%" />
+                  <Skeleton height="20px" width="80%" />
+                </Stack>
+              ) : isRepositoryProcessed ? (
+                <Stack spacing={6}>
+                  {/* Repository Summary */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Repository Summary</Heading>
+                    <Box 
+                      p={4} 
+                      borderWidth="1px" 
+                      borderRadius="lg" 
+                      bg={useColorModeValue('gray.50', 'gray.700')}
+                    >
+                      <Text as="pre" fontFamily="monospace" whiteSpace="pre-wrap">
+                        {ingestData.summary}
+                      </Text>
+                    </Box>
+                  </Box>
+                  
+                  {/* Repository Structure */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Repository Structure</Heading>
+                    <Box 
+                      p={4} 
+                      borderWidth="1px" 
+                      borderRadius="lg" 
+                      bg={useColorModeValue('gray.50', 'gray.700')}
+                      maxH="400px"
+                      overflowY="auto"
+                    >
+                      <Text as="pre" fontFamily="monospace" whiteSpace="pre-wrap">
+                        {ingestData.tree}
+                      </Text>
+                    </Box>
+                  </Box>
+                  
+                  {/* Repository Content */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Repository Content</Heading>
+                    <Box 
+                      p={4} 
+                      borderWidth="1px" 
+                      borderRadius="lg" 
+                      bg={useColorModeValue('gray.50', 'gray.700')}
+                      maxH="500px"
+                      overflowY="auto"
+                    >
+                      <Text as="pre" fontFamily="monospace" whiteSpace="pre-wrap">
+                        {ingestData.content}
+                      </Text>
+                    </Box>
+                  </Box>
+                </Stack>
+              ) : (
+                <Stack spacing={4} align="center">
+                  <Box 
+                    p={5} 
+                    textAlign="center" 
+                    borderWidth="1px" 
+                    borderRadius="lg" 
+                    width="100%"
+                  >
+                    <Heading size="md" mb={3}>Repository Structure Data Not Available</Heading>
+                    <Text mb={5}>
+                      This repository hasn't been processed for structure analysis yet. Process it now to see detailed information about the repository structure, summary, and contents.
+                    </Text>
+                    <Button
+                      colorScheme="brand"
+                      onClick={processRepositoryIngest}
+                      isLoading={processingIngest}
+                      loadingText="Processing..."
+                      isDisabled={!repository || processingIngest}
+                    >
+                      Process Repository Structure
+                    </Button>
+                  </Box>
+                </Stack>
               )}
             </TabPanel>
           </TabPanels>
