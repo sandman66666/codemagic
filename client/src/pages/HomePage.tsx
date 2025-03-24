@@ -37,12 +37,15 @@ import {
   useDisclosure,
   Checkbox,
   Badge,
-  Divider,
   Collapse,
 } from '@chakra-ui/react';
 import { FiCode, FiShield, FiBarChart2, FiCopy, FiGithub, FiSettings, FiChevronDown, FiChevronRight, FiFile, FiFolder } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
+import AiInsightsTab from '../components/AiInsightsTab';
+import CoreElementsTab from '../components/CoreElementsTab';
+import IosAppTab from '../components/IosAppTab';
+
 // File Tree View Component
 interface FileTreeNodeProps {
   name: string;
@@ -775,6 +778,9 @@ const HomePage: React.FC = () => {
                   <Tab>Content</Tab>
                   <Tab>Summary</Tab>
                   <Tab>File Tree</Tab>
+                  <Tab>AI Insights</Tab>
+                  <Tab>Core Elements</Tab>
+                  <Tab>iOS App</Tab>
                 </TabList>
                 
                 <TabPanels>
@@ -865,6 +871,30 @@ const HomePage: React.FC = () => {
                     >
                       {result.tree}
                     </Box>
+                  </TabPanel>
+                  
+                  {/* AI Insights Tab */}
+                  <TabPanel>
+                    <AiInsightsTab 
+                      repositoryUrl={repositoryUrl} 
+                      onCopyToClipboard={copyToClipboard} 
+                    />
+                  </TabPanel>
+                  
+                  {/* Core Elements Tab */}
+                  <TabPanel>
+                    <CoreElementsTab 
+                      repositoryUrl={repositoryUrl} 
+                      onCopyToClipboard={copyToClipboard} 
+                    />
+                  </TabPanel>
+                  
+                  {/* iOS App Tab */}
+                  <TabPanel>
+                    <IosAppTab 
+                      repositoryUrl={repositoryUrl} 
+                      onCopyToClipboard={copyToClipboard} 
+                    />
                   </TabPanel>
                 </TabPanels>
               </Tabs>

@@ -11,6 +11,7 @@ import authRoutes from './routes/auth';
 import repositoryRoutes from './routes/repositories';
 import analysisRoutes from './routes/analysis';
 import userRoutes from './routes/users';
+import aiRoutes from './routes/ai';
 
 // Load environment variables
 dotenv.config();
@@ -38,6 +39,7 @@ app.use('/api/repositories', repositoryRoutes);
 app.use('/api/analyses', analysisRoutes);
 app.use('/api/analysis', analysisRoutes); // Add alias route to match frontend URL
 app.use('/api/users', userRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {

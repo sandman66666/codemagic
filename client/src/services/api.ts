@@ -44,6 +44,16 @@ export const analysisApi = {
   compareAnalyses: (analysisIds: string[]) => api.post('/analyses/compare', { analysisIds }),
 };
 
+// AI features API calls
+export const aiApi = {
+  generateAiInsights: (repositoryUrl: string) => 
+    api.post('/ai/insights', { repositoryUrl }),
+  extractCoreElements: (repositoryUrl: string) => 
+    api.post('/ai/core-elements', { repositoryUrl }),
+  generateIosApp: (repositoryUrl: string) => 
+    api.post('/ai/ios-app', { repositoryUrl }),
+};
+
 // User API calls
 export const userApi = {
   getCurrentUser: () => api.get('/auth/me'),
