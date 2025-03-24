@@ -1,0 +1,14 @@
+Download Redis for Windows:
+
+Go to https://github.com/tporadowski/redis/releases
+Download the latest MSI installer (e.g., Redis-x64-5.0.14.1.msi)
+Install Redis:
+
+Run the downloaded MSI file
+Follow the installation wizard (accepting the default options is usually fine)
+Make sure to check the option to add Redis to the PATH
+Start Redis Server:
+
+Open a Command Prompt (cmd) as Administrator
+Run the Redis server with: redis-server
+You should see a message that the server is running on port 6379

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
+console.log("MONGO_URI from env:", process.env.MONGO_URI);
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/codeinsight';
 

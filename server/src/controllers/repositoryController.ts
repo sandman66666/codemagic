@@ -105,29 +105,51 @@ export const syncRepositories = async (req: Request, res: Response, next: NextFu
         size: repo.size,
       };
       
-      // Find if repo already exists in our db
-      const existingRepo = await Repository.findOne({
+      // First check if repo already exists by owner and name (unique index)
+      let existingRepo = await Repository.findOne({
         owner: user._id,
-        githubId: repo.id.toString(),
+        name: repo.name,
       });
+      
+      // If not found by name, try by githubId (which should be unique per GitHub repo)
+      if (!existingRepo) {
+        existingRepo = await Repository.findOne({
+          owner: user._id,
+          githubId: repo.id.toString(),
+        });
+      }
       
       if (existingRepo) {
         // Only update if forced or repository has been updated
         if (force || new Date(repo.updated_at) > existingRepo.updatedAt) {
-          const updatedRepo = await Repository.findByIdAndUpdate(
-            existingRepo._id,
-            repoData,
-            { new: true }
-          );
-          savedRepos.push(updatedRepo);
+          try {
+            const updatedRepo = await Repository.findByIdAndUpdate(
+              existingRepo._id,
+              repoData,
+              { new: true }
+            );
+            savedRepos.push(updatedRepo);
+          } catch (updateError) {
+            logger.error(`Error updating repository ${repo.name}:`, updateError);
+            // Still add the existing repo to the list even if update fails
+            savedRepos.push(existingRepo);
+          }
         } else {
           savedRepos.push(existingRepo);
         }
       } else {
-        // Create new repo
-        const newRepo = new Repository(repoData);
-        await newRepo.save();
-        savedRepos.push(newRepo);
+        // Create new repo - use findOneAndUpdate with upsert to avoid race conditions
+        try {
+          const newRepo = await Repository.findOneAndUpdate(
+            { owner: user._id, name: repo.name },
+            repoData,
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+          );
+          savedRepos.push(newRepo);
+        } catch (createError) {
+          logger.error(`Error creating repository ${repo.name}:`, createError);
+          // Continue with the next repository
+        }
       }
     }
     
