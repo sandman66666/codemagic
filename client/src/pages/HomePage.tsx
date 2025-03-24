@@ -237,7 +237,7 @@ const Feature = ({ title, text, icon }: { title: string; text: string; icon: Rea
   );
 };
 const HomePage: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [repositoryUrl, setRepositoryUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -517,6 +517,37 @@ const HomePage: React.FC = () => {
     window.location.href = '/api/auth/github';
   };
 
+  // Function to extract username and repo name from GitHub URL
+  const extractGitHubInfo = (url: string) => {
+    const match = url.match(/^https:\/\/github\.com\/([^\/]+)\/([^\/]+)/);
+    if (match) {
+      return {
+        username: match[1],
+        repoName: match[2]
+      };
+    }
+    return null;
+  };
+
+  // Function to get user's repositories and find a matching one
+  const findUserRepositoryByUrl = async (repoName: string): Promise<string | null> => {
+    try {
+      // Get user's repositories
+      const response = await axios.get('/api/repositories');
+      const repositories = response.data;
+      
+      // Find repository with matching name
+      const matchingRepo = repositories.find((repo: any) => 
+        repo.name.toLowerCase() === repoName.toLowerCase()
+      );
+      
+      return matchingRepo ? matchingRepo._id : null;
+    } catch (error) {
+      console.error('Error fetching user repositories:', error);
+      return null;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -531,13 +562,47 @@ const HomePage: React.FC = () => {
     setError(null);
 
     try {
+      // Extract GitHub username and repository name from URL
+      const gitHubInfo = extractGitHubInfo(repositoryUrl);
+      
+      // Check if user is authenticated and if the repository belongs to the current user
+      if (isAuthenticated && user && gitHubInfo && gitHubInfo.username === user.username) {
+        // Try to process as user's private repository
+        try {
+          // Find repository ID from user's repositories
+          const repositoryId = await findUserRepositoryByUrl(gitHubInfo.repoName);
+          
+          if (repositoryId) {
+            // Process as authenticated user's repository
+            const response = await axios.post(`/api/analysis/repository/${repositoryId}/ingest`);
+            
+            // Get the processed content
+            const contentResponse = await axios.get(`/api/analysis/repository/${repositoryId}/ingest`);
+            
+            setResult(contentResponse.data);
+            toast({
+              title: 'Repository analysis complete!',
+              status: 'success',
+              duration: 3000,
+              isClosable: true,
+            });
+            setIsLoading(false);
+            return;
+          }
+        } catch (privateError) {
+          console.error('Error processing private repository:', privateError);
+          // Continue to try public processing if private processing fails
+        }
+      }
+      
+      // Fall back to public repository processing
       const response = await axios.post('/api/analysis/public/ingest', {
         repositoryUrl,
       });
 
       setResult(response.data.content);
       toast({
-        title: 'Repository processed successfully',
+        title: 'Repository analysis complete!',
         status: 'success',
         duration: 3000,
         isClosable: true,
@@ -546,7 +611,7 @@ const HomePage: React.FC = () => {
       console.error('Error processing repository:', error);
       setError(
         error.response?.data?.message ||
-        'Failed to process repository. Please check the URL and try again.'
+        'We couldn\'t analyze this repository. Please check the URL and try again.'
       );
     } finally {
       setIsLoading(false);
@@ -616,7 +681,7 @@ const HomePage: React.FC = () => {
           >
             <VStack spacing={4}>
               <Heading as="h2" size="md" textAlign="center">
-                Enter a GitHub Repository URL to Analyze
+                Analyze a GitHub Repository
               </Heading>
               
               <form onSubmit={handleSubmit} style={{ width: '100%' }}>
@@ -631,7 +696,7 @@ const HomePage: React.FC = () => {
                       size="lg"
                     />
                     <FormHelperText>
-                      Example: https://github.com/facebook/react
+                      Paste any public GitHub repository link to analyze its code
                     </FormHelperText>
                   </FormControl>
                   
@@ -644,7 +709,7 @@ const HomePage: React.FC = () => {
                       size="md"
                       width={{ base: 'full', md: 'auto' }}
                     >
-                      Analyze Repository
+                      Analyze Code
                     </Button>
                     
                     {!isAuthenticated && (
@@ -688,7 +753,7 @@ const HomePage: React.FC = () => {
           {isLoading && (
             <Box textAlign="center" py={6}>
               <Spinner size="xl" mb={4} color="brand.500" />
-              <Text>Processing repository... This may take a few minutes for large repositories.</Text>
+              <Text>Analyzing repository code... This might take a few minutes for larger repositories.</Text>
             </Box>
           )}
 
