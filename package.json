@@ -31,5 +31,8 @@
   "dependencies": {
     "all": "^0.0.0",
     "mongodb": "^6.15.0"
+  },
+  "engines": {
+    "node": ">=18.x"
   }
 }
