@@ -14,14 +14,18 @@ This guide explains how to deploy the CodeInsight application to Heroku.
 ## Important Configuration Notes
 
 ### TypeScript Configuration
-TypeScript has been moved from devDependencies to dependencies in the server's package.json file. This is necessary because Heroku doesn't install devDependencies in production by default, which would cause the build process to fail with "tsc: not found" errors.
+TypeScript has been added as a dependency in both the root package.json and server/package.json files. This ensures that TypeScript is available during the build process in Heroku, which doesn't install devDependencies in production by default.
+
+### Node.js Engine Configuration
+The package.json file specifies Node.js 18.x as the required engine. This is important because Heroku requires a specific Node.js version range rather than an open-ended range (like >=18.x).
 
 ### Build Process
-The application uses a multi-step build process defined in the root package.json:
-1. Server TypeScript compilation
-2. Client build process
+The application uses a multi-step deployment process configured in the Procfile:
+1. Server dependencies installation
+2. Full application build (server TypeScript compilation and client build)
+3. Server startup
 
-The Procfile is configured to run this build process before starting the server.
+This sequence ensures all dependencies are properly installed before the build process begins.
 
 ## Deployment Steps
 
