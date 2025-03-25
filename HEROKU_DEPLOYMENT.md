@@ -19,13 +19,16 @@ TypeScript has been added as a dependency in both the root package.json and serv
 ### Node.js Engine Configuration
 The package.json file specifies Node.js 18.x as the required engine. This is important because Heroku requires a specific Node.js version range rather than an open-ended range (like >=18.x).
 
-### Build Process
+### Build Process and Package Management
 The application uses a multi-step deployment process configured in the Procfile:
-1. Server dependencies installation
-2. Full application build (server TypeScript compilation and client build)
-3. Server startup
+1. Root dependencies installation using `npm install` (not `npm ci`)
+2. Server dependencies installation
+3. Full application build (server TypeScript compilation and client build)
+4. Server startup
 
 This sequence ensures all dependencies are properly installed before the build process begins.
+
+**Important**: The Procfile explicitly uses `npm install` rather than Heroku's default `npm ci` to avoid package-lock.json sync issues. This is necessary because we've added TypeScript to the dependencies while the package-lock.json file might not be updated to match. Using `npm install` allows the installation to proceed without strict package-lock.json validation.
 
 ## Deployment Steps
 
