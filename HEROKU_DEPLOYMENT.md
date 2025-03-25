@@ -20,15 +20,19 @@ TypeScript has been added as a dependency in both the root package.json and serv
 The package.json file specifies Node.js 18.x as the required engine. This is important because Heroku requires a specific Node.js version range rather than an open-ended range (like >=18.x).
 
 ### Build Process and Package Management
-The application uses a multi-step deployment process configured in the Procfile:
-1. Root dependencies installation using `npm install` (not `npm ci`)
-2. Server dependencies installation
-3. Full application build (server TypeScript compilation and client build)
-4. Server startup
+The application uses Heroku's specific build hooks to ensure proper dependency installation and building:
 
-This sequence ensures all dependencies are properly installed before the build process begins.
+1. A `heroku-postbuild` script in package.json handles:
+   - Reinstalling dependencies with `npm install` (not `npm ci`)
+   - Installing server dependencies
+   - Running the build process for both server and client
 
-**Important**: The Procfile explicitly uses `npm install` rather than Heroku's default `npm ci` to avoid package-lock.json sync issues. This is necessary because we've added TypeScript to the dependencies while the package-lock.json file might not be updated to match. Using `npm install` allows the installation to proceed without strict package-lock.json validation.
+2. A simplified Procfile only starts the application:
+   ```
+   web: npm start
+   ```
+
+**Important**: The `heroku-postbuild` script is crucial because it runs after Heroku's initial dependency installation attempt. It uses `npm install` instead of `npm ci`, which allows installation to proceed without strict package-lock.json validation. This solves the "Missing: typescript@5.8.2 from lock file" error by bypassing the package-lock.json mismatch check.
 
 ## Deployment Steps
 
