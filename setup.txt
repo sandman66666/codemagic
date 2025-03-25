@@ -1,0 +1,12 @@
+create an .env file inside server folder
+copy the .env.example content
+set github client id, client secret and AI keys
+
+CodeInsight> pip install gitingest   (or pip3)
+CodeInsight> npm install
+CodeInsight/server> npm install
+CodeInsight/client> npm install
+CodeInsight> npm run dev
+
+http://localhost:3000
+
