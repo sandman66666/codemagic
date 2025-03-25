@@ -30,7 +30,7 @@ router.post('/insights', checkApiKey, async (req, res) => {
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
-        model: "claude-3-opus-20240229",
+        model: "claude-3-7-sonnet-20250219",
         max_tokens: 4000,
         messages: [
           {
@@ -59,8 +59,15 @@ router.post('/insights', checkApiKey, async (req, res) => {
     res.json({ insights: response.data.content[0].text });
   } catch (error) {
     console.error('Error generating AI insights:', error.response?.data || error.message);
+    
+    // Extract detailed error message if it exists
+    const errorDetails = error.response?.data?.error;
+    const detailedMessage = errorDetails?.message ? 
+      `Error generating AI insights: ${errorDetails.message}` : 
+      'Failed to generate AI insights';
+    
     res.status(500).json({ 
-      message: 'Failed to generate AI insights',
+      message: detailedMessage,
       error: error.response?.data?.error || error.message
     });
   }
@@ -81,7 +88,7 @@ router.post('/core-elements', checkApiKey, async (req, res) => {
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
-        model: "claude-3-opus-20240229",
+        model: "claude-3-7-sonnet-20250219",
         max_tokens: 4000,
         messages: [
           {
@@ -110,8 +117,15 @@ router.post('/core-elements', checkApiKey, async (req, res) => {
     res.json({ elements: response.data.content[0].text });
   } catch (error) {
     console.error('Error extracting core elements:', error.response?.data || error.message);
+    
+    // Extract detailed error message if it exists
+    const errorDetails = error.response?.data?.error;
+    const detailedMessage = errorDetails?.message ? 
+      `Error extracting core elements: ${errorDetails.message}` : 
+      'Failed to extract core elements';
+    
     res.status(500).json({ 
-      message: 'Failed to extract core elements',
+      message: detailedMessage,
       error: error.response?.data?.error || error.message
     });
   }
@@ -132,7 +146,7 @@ router.post('/ios-app', checkApiKey, async (req, res) => {
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
-        model: "claude-3-opus-20240229",
+        model: "claude-3-7-sonnet-20250219",
         max_tokens: 4000,
         messages: [
           {
@@ -163,8 +177,15 @@ router.post('/ios-app', checkApiKey, async (req, res) => {
     res.json({ iosApp: response.data.content[0].text });
   } catch (error) {
     console.error('Error generating iOS app conversion:', error.response?.data || error.message);
+    
+    // Extract detailed error message if it exists
+    const errorDetails = error.response?.data?.error;
+    const detailedMessage = errorDetails?.message ? 
+      `Error generating iOS app conversion: ${errorDetails.message}` : 
+      'Failed to generate iOS app conversion';
+    
     res.status(500).json({ 
-      message: 'Failed to generate iOS app conversion',
+      message: detailedMessage,
       error: error.response?.data?.error || error.message
     });
   }
