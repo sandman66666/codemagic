@@ -14,15 +14,53 @@ export class RepositoryIngestService {
   public tempDir: string;
 
   constructor() {
-    // Path to the Python script (in project root, one level up from server)
-    this.pythonScript = path.join(process.cwd(), '..', 'repository-ingest.py');
+    // Determine the correct path to the Python script based on environment
+    if (process.env.NODE_ENV === 'production') {
+      // In Heroku, check different possible locations for the script
+      const productionPaths = [
+        // In the app root directory
+        path.join(process.cwd(), 'repository-ingest.py'),
+        // At the same level as server directory
+        path.join(process.cwd(), '..', 'repository-ingest.py'),
+        // Directly in /app directory (Heroku's root)
+        '/app/repository-ingest.py'
+      ];
+      
+      // Find the first path that exists
+      const existingPath = productionPaths.find(p => fs.existsSync(p));
+      if (existingPath) {
+        this.pythonScript = existingPath;
+        logger.info(`Found Python script at: ${this.pythonScript}`);
+      } else {
+        // Default to app root if none found (and log an error)
+        this.pythonScript = path.join(process.cwd(), 'repository-ingest.py');
+        logger.error(`Python script not found at any expected locations: ${productionPaths.join(', ')}`);
+      }
+    } else {
+      // Development environment - script is in project root, one level up from server
+      this.pythonScript = path.join(process.cwd(), '..', 'repository-ingest.py');
+    }
     
-    // Use the same temp directory as the main analysis service
+    // Configure the temp directory to work across environments
     const configTempDir = process.env.TEMP_DIR;
     if (configTempDir && configTempDir !== './tmp') {
       this.tempDir = path.resolve(configTempDir);
+    } else if (process.env.NODE_ENV === 'production') {
+      // In Heroku (production), use the /tmp directory which is writable
+      this.tempDir = path.join('/tmp', 'codeinsight');
     } else {
+      // In development, use os.tmpdir()
       this.tempDir = path.join(os.tmpdir(), 'codeinsight');
+    }
+    
+    // Ensure the temp directory exists
+    if (!fs.existsSync(this.tempDir)) {
+      try {
+        fs.mkdirSync(this.tempDir, { recursive: true });
+        logger.info(`Created temp directory: ${this.tempDir}`);
+      } catch (error) {
+        logger.error(`Failed to create temp directory: ${error}`);
+      }
     }
     
     // Ensure the script exists
@@ -178,11 +216,27 @@ export class RepositoryIngestService {
       const treePath = path.join(this.tempDir, `${repoId}_tree.txt`);
       const contentPath = path.join(this.tempDir, `${repoId}_content.txt`);
       
-      // Check if files exist
-      if (!fs.existsSync(summaryPath) || 
-          !fs.existsSync(treePath) ||
-          !fs.existsSync(contentPath)) {
-        throw new Error(`Ingested content not found for repository: ${repoId}`);
+      // Check if files exist with detailed logging
+      const missingFiles = [];
+      if (!fs.existsSync(summaryPath)) missingFiles.push('summary');
+      if (!fs.existsSync(treePath)) missingFiles.push('tree');
+      if (!fs.existsSync(contentPath)) missingFiles.push('content');
+      
+      if (missingFiles.length > 0) {
+        // List the temp directory contents for debugging
+        let dirContents = [];
+        try {
+          dirContents = fs.readdirSync(this.tempDir);
+          logger.info(`Temp directory (${this.tempDir}) contents: ${dirContents.join(', ')}`);
+        } catch (err) {
+          logger.error(`Failed to read temp directory contents: ${err}`);
+        }
+        
+        throw new Error(
+          `Ingested content not found for repository: ${repoId}. ` +
+          `Missing files: ${missingFiles.join(', ')}. ` +
+          `Temp directory path: ${this.tempDir}`
+        );
       }
       
       // Read file contents

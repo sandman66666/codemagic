@@ -75,35 +75,52 @@ heroku buildpacks:add heroku/nodejs
 # Add Python buildpack
 heroku buildpacks:add heroku/python
 
+# Add Apt buildpack for system dependencies (Git)
+heroku buildpacks:add --index 1 heroku-community/apt
+
 # Verify the buildpacks
 heroku buildpacks
 ```
 
-The output should show both buildpacks in the correct order (Node.js first, then Python):
+The output should show all buildpacks in the correct order:
 
 ```
 === your-app-name Buildpack URLs
-1. heroku/nodejs
-2. heroku/python
+1. heroku-community/apt
+2. heroku/nodejs
+3. heroku/python
 ```
 
 If you need to set the order specifically:
 
 ```bash
 heroku buildpacks:clear
+heroku buildpacks:add heroku-community/apt
 heroku buildpacks:add heroku/nodejs
 heroku buildpacks:add heroku/python
 ```
 
-### 3. Create requirements.txt for Python dependencies
+### 3. System Dependencies and Python Requirements
 
-Create a `requirements.txt` file in the root of your project with the following content:
+#### a. Aptfile for System Dependencies
+
+An `Aptfile` in the root of your project specifies system-level dependencies required by the application. The app needs Git for repository analysis:
+
+```
+git
+```
+
+This file works with the Apt buildpack to install Git on the Heroku dyno.
+
+#### b. Python Dependencies
+
+The `requirements.txt` file in the root of your project specifies Python packages:
 
 ```
 gitingest>=0.1.0
 ```
 
-This tells Heroku to install the gitingest Python package needed by repository-ingest.py.
+This tells Heroku to install the gitingest Python package needed by repository-ingest.py, which requires Git to be installed on the system.
 
 ### 4. Configure Environment Variables
 
