@@ -36,6 +36,7 @@
     "passport-github2": "^0.1.12",
     "passport-jwt": "^4.0.1",
     "redis": "^4.6.11",
+    "rimraf": "^4.0.0",
     "simple-git": "^3.21.0",
     "typescript": "^5.3.3",
     "uuid": "^11.1.0",
