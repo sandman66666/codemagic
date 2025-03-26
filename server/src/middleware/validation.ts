@@ -20,8 +20,10 @@ export const validate = (validations: ValidationChain[]) => {
     
     // Format validation errors
     const formattedErrors = errors.array().map(error => {
+      // Use type assertion to access error properties
+      const fieldName = error.type === 'field' ? (error as any).path : error.type;
       return {
-        field: error.param,
+        field: fieldName,
         message: error.msg,
       };
     });

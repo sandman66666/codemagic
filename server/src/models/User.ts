@@ -9,6 +9,7 @@ export interface IUser extends Document {
   githubToken: string;
   githubRefreshToken?: string;
   isAdmin: boolean;
+  favorites: mongoose.Types.ObjectId[] | any[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,6 +47,11 @@ const UserSchema: Schema = new Schema(
       type: Boolean,
       default: false,
     },
+    favorites: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Repository',
+      default: [],
+    }],
   },
   {
     timestamps: true,
