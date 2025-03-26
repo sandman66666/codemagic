@@ -29,17 +29,17 @@ import { repositoryApi, analysisApi } from '../services/api';
 const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
   return (
     <Box
-      p={5}
+      p={{ base: 4, md: 5 }}
       shadow="md"
       borderWidth="1px"
       borderRadius="lg"
       bg={useColorModeValue('white', 'gray.700')}
       _hover={{ shadow: 'lg', transform: 'translateY(-2px)', transition: 'all 0.2s' }}
     >
-      <HStack justify="space-between" mb={2}>
+      <HStack justify="space-between" mb={2} flexWrap={{ base: "wrap", sm: "nowrap" }} gap={2}>
         <HStack>
           <FiGithub />
-          <Text fontWeight="bold" fontSize="lg">
+          <Text fontWeight="bold" fontSize={{ base: "md", md: "lg" }} noOfLines={1}>
             {repo.name}
           </Text>
         </HStack>
@@ -48,27 +48,27 @@ const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
         </Badge>
       </HStack>
       
-      <Text color="gray.600" noOfLines={2} mb={4}>
+      <Text color="gray.600" noOfLines={2} mb={4} fontSize={{ base: "sm", md: "md" }}>
         {repo.description}
       </Text>
       
-      <HStack justify="space-between">
+      <HStack justify="space-between" flexWrap={{ base: "wrap", md: "nowrap" }} gap={2}>
         <HStack>
           <Avatar size="xs" src={repo.owner?.avatarUrl || ''} />
-          <Text fontSize="sm">{repo.fullName?.split('/')[0] || ''}</Text>
+          <Text fontSize="sm" noOfLines={1}>{repo.fullName?.split('/')[0] || ''}</Text>
         </HStack>
-        <HStack spacing={4}>
+        <HStack spacing={{ base: 2, md: 4 }} flexWrap="wrap">
           <HStack>
             <FiStar />
-            <Text fontSize="sm">{repo.stars}</Text>
+            <Text fontSize={{ base: "xs", md: "sm" }}>{repo.stars}</Text>
           </HStack>
           <HStack>
             <FiCode />
-            <Text fontSize="sm">{repo.language}</Text>
+            <Text fontSize={{ base: "xs", md: "sm" }}>{repo.language}</Text>
           </HStack>
           <HStack>
             <FiClock />
-            <Text fontSize="sm">{new Date(repo.updatedAt).toLocaleDateString()}</Text>
+            <Text fontSize={{ base: "xs", md: "sm" }}>{new Date(repo.updatedAt).toLocaleDateString()}</Text>
           </HStack>
         </HStack>
       </HStack>
@@ -79,7 +79,7 @@ const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
         as={RouterLink}
         to={`/repository/${repo._id}`}
         colorScheme="brand"
-        size="sm"
+        size={{ base: "xs", md: "sm" }}
         width="full"
       >
         Analyze Repository
@@ -91,23 +91,25 @@ const RepositoryCard: React.FC<{ repo: any }> = ({ repo }) => {
 const AnalysisCard: React.FC<{ analysis: any }> = ({ analysis }) => {
   return (
     <Box
-      p={4}
+      p={{ base: 3, md: 4 }}
       shadow="sm"
       borderWidth="1px"
       borderRadius="md"
       bg={useColorModeValue('white', 'gray.700')}
     >
-      <HStack justify="space-between" mb={2}>
-        <Text fontWeight="bold">{analysis.repository?.name || 'Repository'}</Text>
+      <HStack justify="space-between" mb={2} flexWrap={{ base: "wrap", sm: "nowrap" }} gap={1}>
+        <Text fontWeight="bold" fontSize={{ base: "sm", md: "md" }} noOfLines={1}>
+          {analysis.repository?.name || 'Repository'}
+        </Text>
         <Badge colorScheme={analysis.status === 'completed' ? 'green' : 'yellow'}>
           {analysis.status}
         </Badge>
       </HStack>
-      <Text fontSize="sm" color="gray.600" mb={2}>
+      <Text fontSize={{ base: "xs", md: "sm" }} color="gray.600" mb={2} noOfLines={{ base: 2, md: 3 }}>
         {analysis.summary?.overview || 'Analysis in progress...'}
       </Text>
-      <HStack justify="space-between">
-        <Text fontSize="xs" color="gray.500">
+      <HStack justify="space-between" flexWrap={{ base: "wrap", sm: "nowrap" }} gap={2}>
+        <Text fontSize={{ base: "2xs", md: "xs" }} color="gray.500">
           {new Date(analysis.createdAt).toLocaleDateString()}
         </Text>
         <Button
@@ -199,22 +201,33 @@ const DashboardPage: React.FC = () => {
   );
 
   return (
-    <Container maxW="container.xl" py={5}>
-      <Stack spacing={8}>
-        <Flex justify="space-between" align="center">
-          <Heading size="lg">Dashboard</Heading>
-          <Text color="gray.600">
+    <Container maxW={{ base: "95%", sm: "90%", md: "90%", lg: "container.xl" }} py={{ base: 3, md: 5 }}>
+      <Stack spacing={{ base: 5, md: 8 }}>
+        <Flex 
+          justify="space-between" 
+          align={{ base: "flex-start", sm: "center" }} 
+          flexDirection={{ base: "column", sm: "row" }}
+          gap={{ base: 2, sm: 0 }}
+        >
+          <Heading size={{ base: "md", md: "lg" }}>Dashboard</Heading>
+          <Text color="gray.600" fontSize={{ base: "sm", md: "md" }}>
             Welcome back, {user?.username || 'User'}
           </Text>
         </Flex>
 
         <Box>
-          <Flex justify="space-between" align="center" mb={4}>
-            <Heading size="md">Your Repositories</Heading>
+          <Flex 
+            justify="space-between" 
+            align={{ base: "flex-start", sm: "center" }} 
+            mb={4}
+            flexDirection={{ base: "column", sm: "row" }}
+            gap={{ base: 2, sm: 0 }}
+          >
+            <Heading size={{ base: "sm", md: "md" }}>Your Repositories</Heading>
             <Button 
               leftIcon={<FiRefreshCw />} 
               colorScheme="brand" 
-              size="sm"
+              size={{ base: "xs", md: "sm" }}
               isLoading={syncingRepos}
               onClick={handleSyncRepositories}
             >
@@ -229,13 +242,14 @@ const DashboardPage: React.FC = () => {
               placeholder="Search repositories..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              size={{ base: "sm", md: "md" }}
             />
           </InputGroup>
           
           {loading ? (
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+            <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={{ base: 3, md: 6 }}>
               {[1, 2, 3].map((i) => (
-                <Box key={i} p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+                <Box key={i} p={{ base: 4, md: 5 }} shadow="md" borderWidth="1px" borderRadius="lg">
                   <Skeleton height="24px" width="60%" mb={4} />
                   <Skeleton height="16px" mb={2} />
                   <Skeleton height="16px" mb={4} />
@@ -245,19 +259,20 @@ const DashboardPage: React.FC = () => {
               ))}
             </SimpleGrid>
           ) : filteredRepos.length > 0 ? (
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+            <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={{ base: 3, md: 6 }}>
               {filteredRepos.map((repo) => (
                 <RepositoryCard key={repo._id} repo={repo} />
               ))}
             </SimpleGrid>
           ) : (
-            <VStack spacing={4} p={5} borderWidth="1px" borderRadius="lg" align="center">
-              <Text>No repositories found.</Text>
+            <VStack spacing={4} p={{ base: 3, md: 5 }} borderWidth="1px" borderRadius="lg" align="center">
+              <Text fontSize={{ base: "sm", md: "md" }}>No repositories found.</Text>
               <Button 
                 leftIcon={<FiGithub />} 
                 colorScheme="brand"
                 onClick={handleSyncRepositories}
                 isLoading={syncingRepos}
+                size={{ base: "xs", md: "sm" }}
               >
                 Sync GitHub Repositories
               </Button>
@@ -266,11 +281,11 @@ const DashboardPage: React.FC = () => {
         </Box>
 
         <Box>
-          <Heading size="md" mb={4}>Recent Analyses</Heading>
+          <Heading size={{ base: "sm", md: "md" }} mb={4}>Recent Analyses</Heading>
           {loading ? (
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={{ base: 3, md: 4 }}>
               {[1, 2].map((i) => (
-                <Box key={i} p={4} shadow="sm" borderWidth="1px" borderRadius="md">
+                <Box key={i} p={{ base: 3, md: 4 }} shadow="sm" borderWidth="1px" borderRadius="md">
                   <Skeleton height="20px" width="60%" mb={3} />
                   <Skeleton height="14px" mb={2} />
                   <Skeleton height="30px" mt={3} />
@@ -278,14 +293,14 @@ const DashboardPage: React.FC = () => {
               ))}
             </SimpleGrid>
           ) : analyses.length > 0 ? (
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={{ base: 3, md: 4 }}>
               {analyses.slice(0, 4).map((analysis) => (
                 <AnalysisCard key={analysis._id} analysis={analysis} />
               ))}
             </SimpleGrid>
           ) : (
-            <Box p={5} borderWidth="1px" borderRadius="lg" textAlign="center">
-              <Text>No recent analyses found. Analyze a repository to get started.</Text>
+            <Box p={{ base: 3, md: 5 }} borderWidth="1px" borderRadius="lg" textAlign="center">
+              <Text fontSize={{ base: "sm", md: "md" }}>No recent analyses found. Analyze a repository to get started.</Text>
             </Box>
           )}
         </Box>

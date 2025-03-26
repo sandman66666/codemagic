@@ -633,14 +633,14 @@ const HomePage: React.FC = () => {
 
   return (
     <Box bg={useColorModeValue('gray.50', 'gray.900')} minH="100vh">
-      <Container maxW={'4xl'} pt={10} pb={10}>
-        <VStack spacing={10}>
+      <Container maxW={{ base: '95%', md: '90%', lg: '4xl' }} pt={{ base: 5, md: 10 }} pb={{ base: 5, md: 10 }}>
+        <VStack spacing={{ base: 6, md: 10 }}>
           {/* Hero Section */}
-          <VStack textAlign="center" spacing={6}>
+          <VStack textAlign="center" spacing={{ base: 4, md: 6 }}>
             <Heading
               lineHeight={1.1}
               fontWeight={600}
-              fontSize={{ base: '3xl', sm: '4xl', lg: '6xl' }}
+              fontSize={{ base: '2xl', sm: '3xl', md: '4xl', lg: '6xl' }}
             >
               <Text
                 as={'span'}
@@ -666,7 +666,7 @@ const HomePage: React.FC = () => {
             <Text
               color={'gray.500'}
               maxW={'2xl'}
-              fontSize={{ base: 'md', md: 'lg' }}
+              fontSize={{ base: 'sm', md: 'md', lg: 'lg' }}
             >
               CodeInsight enhances code understanding by leveraging AI to analyze GitHub repositories.
               Get intelligent code analysis, vulnerability scanning, and interactive visualizations for your
@@ -677,7 +677,7 @@ const HomePage: React.FC = () => {
           {/* Repository Entry Form */}
           <Box
             w="full"
-            p={6}
+            p={{ base: 4, md: 6 }}
             borderRadius="lg"
             bg={useColorModeValue('white', 'gray.700')}
             boxShadow="md"
@@ -696,20 +696,20 @@ const HomePage: React.FC = () => {
                       value={repositoryUrl}
                       onChange={handleRepositoryUrlChange}
                       isDisabled={isLoading}
-                      size="lg"
+                      size={{ base: "md", md: "lg" }}
                     />
                     <FormHelperText>
                       Paste any public GitHub repository link to analyze its code
                     </FormHelperText>
                   </FormControl>
                   
-                  <Flex w="full" justify="center" gap={3}>
+                  <Flex w="full" justify="center" gap={3} direction={{ base: 'column', md: 'row' }}>
                     <Button
                       colorScheme="brand"
                       isLoading={isLoading}
                       type="submit"
                       leftIcon={<FiGithub />}
-                      size="md"
+                      size={{ base: "sm", md: "md" }}
                       width={{ base: 'full', md: 'auto' }}
                     >
                       Analyze Code
@@ -720,7 +720,7 @@ const HomePage: React.FC = () => {
                         colorScheme="gray"
                         onClick={handleGitHubAuth}
                         leftIcon={<FiGithub />}
-                        size="md"
+                        size={{ base: "sm", md: "md" }}
                         width={{ base: 'full', md: 'auto' }}
                       >
                         Continue with GitHub
@@ -733,7 +733,7 @@ const HomePage: React.FC = () => {
                         to="/dashboard"
                         colorScheme="gray"
                         leftIcon={<FiCode />}
-                        size="md"
+                        size={{ base: "sm", md: "md" }}
                         width={{ base: 'full', md: 'auto' }}
                       >
                         My Repositories
@@ -764,35 +764,35 @@ const HomePage: React.FC = () => {
           {result && (
             <Box
               w="full"
-              p={6}
+              p={{ base: 3, md: 6 }}
               borderRadius="lg"
               bg={useColorModeValue('white', 'gray.700')}
               boxShadow="md"
             >
-              <Heading as="h3" size="md" mb={4} textAlign="center">
+              <Heading as="h3" size={{ base: "sm", md: "md" }} mb={4} textAlign="center">
                 Analysis Results
               </Heading>
               
-              <Tabs colorScheme="brand" variant="enclosed" isFitted>
-                <TabList>
-                  <Tab>Content</Tab>
-                  <Tab>Summary</Tab>
-                  <Tab>File Tree</Tab>
-                  <Tab>AI Insights</Tab>
-                  <Tab>Core Elements</Tab>
-                  <Tab>iOS App</Tab>
+              <Tabs colorScheme="brand" variant="enclosed" isFitted size={{ base: "sm", md: "md" }}>
+                <TabList overflowX={{ base: "auto", md: "visible" }} flexWrap={{ base: "nowrap", md: "wrap" }}>
+                  <Tab minW={{ base: "100px", md: "auto" }}>Content</Tab>
+                  <Tab minW={{ base: "100px", md: "auto" }}>Summary</Tab>
+                  <Tab minW={{ base: "100px", md: "auto" }}>File Tree</Tab>
+                  <Tab minW={{ base: "100px", md: "auto" }}>AI Insights</Tab>
+                  <Tab minW={{ base: "100px", md: "auto" }}>Core Elements</Tab>
+                  <Tab minW={{ base: "100px", md: "auto" }}>iOS App</Tab>
                 </TabList>
                 
                 <TabPanels>
-                  <TabPanel>
-                    <Flex justify="space-between" mb={2}>
+                  <TabPanel p={{ base: 2, md: 4 }}>
+                    <Flex justify="space-between" mb={2} direction={{ base: "column", sm: "row" }} gap={2}>
                       <HStack>
                         <Badge colorScheme="blue">
                           {selectedFiles.length} of {availableFiles.length} files
                         </Badge>
                       </HStack>
                       
-                      <HStack>
+                      <HStack justifyContent={{ base: "flex-start", sm: "flex-end" }} width={{ base: "100%", sm: "auto" }}>
                         <Tooltip label="Select files to display">
                           <IconButton
                             aria-label="File settings"
@@ -813,19 +813,20 @@ const HomePage: React.FC = () => {
                       </HStack>
                     </Flex>
                     <Box
-                      p={4}
+                      p={{ base: 2, md: 4 }}
                       borderRadius="md"
                       bg={useColorModeValue('gray.50', 'gray.800')}
                       overflowY="auto"
-                      maxHeight="500px"
+                      maxHeight={{ base: "300px", md: "500px" }}
                       whiteSpace="pre-wrap"
                       fontFamily="monospace"
+                      fontSize={{ base: "xs", md: "sm" }}
                     >
                       {getFilteredContent()}
                     </Box>
                   </TabPanel>
                   
-                  <TabPanel>
+                  <TabPanel p={{ base: 2, md: 4 }}>
                     <Flex justify="flex-end" mb={2}>
                       <Tooltip label="Copy to clipboard">
                         <IconButton
@@ -837,37 +838,26 @@ const HomePage: React.FC = () => {
                       </Tooltip>
                     </Flex>
                     <Box
-                      p={4}
+                      p={{ base: 2, md: 4 }}
                       borderRadius="md"
                       bg={useColorModeValue('gray.50', 'gray.800')}
                       overflowY="auto"
-                      maxHeight="500px"
+                      maxHeight={{ base: "300px", md: "500px" }}
                       whiteSpace="pre-wrap"
-                      fontFamily="monospace"
+                      fontSize={{ base: "xs", md: "sm" }}
                     >
                       {result.summary}
                     </Box>
                   </TabPanel>
                   
-                  <TabPanel>
-                    <Flex justify="flex-end" mb={2}>
-                      <Tooltip label="Copy to clipboard">
-                        <IconButton
-                          aria-label="Copy file tree"
-                          icon={<FiCopy />}
-                          size="sm"
-                          onClick={() => copyToClipboard(result.tree, 'File Tree')}
-                        />
-                      </Tooltip>
-                    </Flex>
-                    <Box
-                      p={4}
+                  <TabPanel p={{ base: 2, md: 4 }}>
+                    <Box 
+                      p={{ base: 2, md: 4 }}
                       borderRadius="md"
                       bg={useColorModeValue('gray.50', 'gray.800')}
                       overflowY="auto"
-                      maxHeight="500px"
-                      whiteSpace="pre-wrap"
-                      fontFamily="monospace"
+                      maxHeight={{ base: "300px", md: "500px" }}
+                      fontSize={{ base: "xs", md: "sm" }}
                     >
                       {result.tree}
                     </Box>
@@ -901,77 +891,79 @@ const HomePage: React.FC = () => {
             </Box>
           )}
           {/* File Selection Modal */}
-          <Modal isOpen={isFileSelectOpen} onClose={onFileSelectClose} size="xl">
+          <Modal isOpen={isFileSelectOpen} onClose={onFileSelectClose} size={{ base: "sm", md: "md", lg: "lg" }}>
             <ModalOverlay />
             <ModalContent>
-              <ModalHeader>Select Files to Display</ModalHeader>
+              <ModalHeader fontSize={{ base: "md", md: "lg" }}>Select Files to Display</ModalHeader>
               <ModalCloseButton />
               <ModalBody>
                 <VStack align="stretch" spacing={4}>
-                  <HStack justify="space-between">
-                    <Text>
+                  <Flex justify="space-between" align="center">
+                    <Text fontSize={{ base: "sm", md: "md" }}>
                       {selectedFiles.length} of {availableFiles.length} files selected
                     </Text>
-                    <Button 
-                      size="sm" 
-                      colorScheme="blue"
-                      onClick={toggleSelectAll}
-                    >
-                      {selectedFiles.length === availableFiles.length ? "Deselect All" : "Select All"}
+                    <Button size="sm" onClick={toggleSelectAll}>
+                      {selectedFiles.length === availableFiles.length ? 'Deselect All' : 'Select All'}
                     </Button>
-                  </HStack>
+                  </Flex>
                   
-                  {availableFiles.length === 0 ? (
-                    <Box p={5} borderWidth="1px" borderRadius="md" bg="gray.50" textAlign="center">
-                      <Text color="gray.500">No files detected in the repository content.</Text>
-                      <Text fontSize="sm" mt={2}>Try processing a different repository or check the content format.</Text>
-                    </Box>
-                  ) : (
-                    <Box 
-                      borderWidth="1px" 
-                      borderRadius="md" 
-                      p={3} 
-                      maxHeight="400px" 
-                      overflowY="auto"
-                      bg={useColorModeValue('white', 'gray.700')}
-                    >
-                      {Object.keys(fileTree).length === 0 ? (
-                        // Flat file list fallback
-                        <VStack align="stretch" spacing={1}>
-                          {availableFiles.map((file) => (
-                            <Flex 
-                              key={file} 
-                              p={2} 
-                              borderRadius="md" 
-                              _hover={{ bg: 'gray.100' }}
-                              onClick={() => toggleFileSelection(file)}
-                              cursor="pointer"
-                              align="center"
-                            >
-                              <Checkbox 
-                                isChecked={selectedFiles.includes(file)}
-                                mr={2}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  toggleFileSelection(file);
-                                }}
-                              />
-                              <Text>{file}</Text>
-                            </Flex>
-                          ))}
-                        </VStack>
-                      ) : (
-                        // Tree view
-                        <FileTreeView 
-                          tree={fileTree} 
-                          selectedFiles={selectedFiles}
-                          toggleFile={toggleFileSelection}
-                          toggleDirectory={toggleDirectoryFiles}
-                          getAllFilesInDir={getAllFilesInDir}
-                        />
-                      )}
-                    </Box>
-                  )}
+                  <Box 
+                    borderWidth="1px" 
+                    borderRadius="md" 
+                    p={2}
+                    maxHeight={{ base: "250px", md: "350px" }} 
+                    overflowY="auto"
+                    fontSize={{ base: "xs", md: "sm" }}
+                  >
+                    {availableFiles.length === 0 ? (
+                      <Box p={5} borderWidth="1px" borderRadius="md" bg="gray.50" textAlign="center">
+                        <Text color="gray.500">No files detected in the repository content.</Text>
+                        <Text fontSize="sm" mt={2}>Try processing a different repository or check the content format.</Text>
+                      </Box>
+                    ) : (
+                      <Box 
+                        p={2}
+                        borderRadius="md"
+                        bg={useColorModeValue('white', 'gray.700')}
+                      >
+                        {Object.keys(fileTree).length === 0 ? (
+                          // Flat file list fallback
+                          <VStack align="stretch" spacing={1}>
+                            {availableFiles.map((file) => (
+                              <Flex 
+                                key={file} 
+                                p={2} 
+                                borderRadius="md" 
+                                _hover={{ bg: 'gray.100' }}
+                                onClick={() => toggleFileSelection(file)}
+                                cursor="pointer"
+                                align="center"
+                              >
+                                <Checkbox 
+                                  isChecked={selectedFiles.includes(file)}
+                                  mr={2}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleFileSelection(file);
+                                  }}
+                                />
+                                <Text>{file}</Text>
+                              </Flex>
+                            ))}
+                          </VStack>
+                        ) : (
+                          // Tree view
+                          <FileTreeView 
+                            tree={fileTree} 
+                            selectedFiles={selectedFiles}
+                            toggleFile={toggleFileSelection}
+                            toggleDirectory={toggleDirectoryFiles}
+                            getAllFilesInDir={getAllFilesInDir}
+                          />
+                        )}
+                      </Box>
+                    )}
+                  </Box>
                   
                   <Box p={3} borderWidth="1px" borderRadius="md" bg="blue.50">
                     <Text fontSize="sm">
@@ -989,28 +981,28 @@ const HomePage: React.FC = () => {
             </ModalContent>
           </Modal>
           {/* Features Section */}
-          <Box id="features" w="full">
-            <VStack spacing={6} textAlign="center">
-              <Heading fontSize={'2xl'}>Features</Heading>
-              
-              <SimpleGrid columns={{ base: 1, md: 3 }} spacing={10} w="full">
-                <Feature
-                  icon={<Icon as={FiCode} w={8} h={8} />}
-                  title={'Code Analysis'}
-                  text={'AI-powered code review that identifies patterns and issues.'}
-                />
-                <Feature
-                  icon={<Icon as={FiShield} w={8} h={8} />}
-                  title={'Security Scanning'}
-                  text={'Detect security vulnerabilities in your codebase.'}
-                />
-                <Feature
-                  icon={<Icon as={FiBarChart2} w={8} h={8} />}
-                  title={'Visualizations'}
-                  text={'Explore your codebase with intuitive visualizations.'}
-                />
-              </SimpleGrid>
-            </VStack>
+          <Box w="full" py={10}>
+            <Heading as="h2" size={{ base: "lg", md: "xl" }} textAlign="center" mb={10}>
+              Key Features
+            </Heading>
+            
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={{ base: 5, md: 10 }}>
+              <Feature
+                icon={<Icon as={FiCode} w={8} h={8} />}
+                title={'Code Analysis'}
+                text={'AI-powered code review that identifies patterns and issues.'}
+              />
+              <Feature
+                icon={<Icon as={FiShield} w={8} h={8} />}
+                title={'Security Scanning'}
+                text={'Detect security vulnerabilities in your codebase.'}
+              />
+              <Feature
+                icon={<Icon as={FiBarChart2} w={8} h={8} />}
+                title={'Visualizations'}
+                text={'Explore your codebase with intuitive visualizations.'}
+              />
+            </SimpleGrid>
           </Box>
         </VStack>
       </Container>
