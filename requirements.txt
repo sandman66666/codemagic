@@ -1,1 +1,4 @@
 gitingest>=0.1.0
+setuptools>=42.0.0
+wheel>=0.33.0
+pip>=19.0.0

@@ -1,8 +1,11 @@
-import { spawn } from 'child_process';
+import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { promisify } from 'util';
 import { logger } from '../utils/logger';
+
+const execPromise = promisify(exec);
 
 /**
  * Service for ingesting repositories using the gitingest Python library
@@ -79,6 +82,39 @@ export class RepositoryIngestService {
     try {
       logger.info(`Processing repository with gitingest: ${repoPath}`);
       
+      // Verify Python script exists
+      if (!fs.existsSync(this.pythonScript)) {
+        logger.error(`Python script not found: ${this.pythonScript}`);
+        throw new Error(`Python script not found: ${this.pythonScript}`);
+      }
+      
+      // Verify temp directory exists and is writable
+      if (!fs.existsSync(this.tempDir)) {
+        logger.info(`Creating temp directory: ${this.tempDir}`);
+        try {
+          fs.mkdirSync(this.tempDir, { recursive: true });
+        } catch (error) {
+          logger.error(`Failed to create temp directory: ${error}`);
+          throw new Error(`Failed to create temp directory: ${error}`);
+        }
+      }
+      
+      try {
+        // Check if Python and gitingest are installed
+        const pythonVersionResult = await execPromise('python --version');
+        logger.info(`Python version: ${pythonVersionResult.stdout.trim()}`);
+        
+        // Try to check if gitingest is installed
+        try {
+          await execPromise('python -c "import gitingest; print(gitingest.__version__)"');
+        } catch (importError) {
+          logger.error(`Failed to import gitingest: ${importError}`);
+          throw new Error(`gitingest module not found or failed to import. Ensure it's installed with 'pip install gitingest'.`);
+        }
+      } catch (checkError) {
+        logger.error(`Error checking Python environment: ${checkError}`);
+      }
+      
       // Determine if repoPath is a full path or just an ID
       let fullRepoPath = repoPath;
       if (!repoPath.includes(path.sep) && !repoPath.startsWith('http')) {
@@ -88,12 +124,17 @@ export class RepositoryIngestService {
       
       return new Promise((resolve, reject) => {
         // Build command arguments
-        const args = ['--repo', fullRepoPath];
+        const args = ['--repo', fullRepoPath, '--verbose'];
         
         // Add optional repo ID if provided
         if (repoId) {
           args.push('--repo-id', repoId);
         }
+        
+        // Add the output directory explicitly
+        args.push('--output-dir', this.tempDir);
+        
+        logger.info(`Executing: python ${this.pythonScript} ${args.join(' ')}`);
         
         // Execute the Python script
         const pythonProcess = spawn('python', [this.pythonScript, ...args]);
@@ -102,43 +143,101 @@ export class RepositoryIngestService {
         let stderr = '';
         
         pythonProcess.stdout.on('data', (data) => {
-          stdout += data.toString();
+          const dataStr = data.toString();
+          stdout += dataStr;
+          logger.debug(`Python stdout: ${dataStr}`);
         });
         
         pythonProcess.stderr.on('data', (data) => {
-          stderr += data.toString();
+          const dataStr = data.toString();
+          stderr += dataStr;
+          logger.error(`Python stderr: ${dataStr}`);
         });
         
         pythonProcess.on('close', (code) => {
           if (code !== 0) {
             logger.error(`Python script exited with code ${code}: ${stderr}`);
+            // Try fallback to python3 command if python failed
+            if (stderr.includes('not found') || stderr.includes('not recognized')) {
+              logger.info('Trying fallback to python3 command...');
+              
+              const python3Process = spawn('python3', [this.pythonScript, ...args]);
+              
+              let python3Stdout = '';
+              let python3Stderr = '';
+              
+              python3Process.stdout.on('data', (data) => {
+                const dataStr = data.toString();
+                python3Stdout += dataStr;
+                logger.debug(`Python3 stdout: ${dataStr}`);
+              });
+              
+              python3Process.stderr.on('data', (data) => {
+                const dataStr = data.toString();
+                python3Stderr += dataStr;
+                logger.error(`Python3 stderr: ${dataStr}`);
+              });
+              
+              python3Process.on('close', (python3Code) => {
+                if (python3Code !== 0) {
+                  logger.error(`Python3 script also failed with code ${python3Code}: ${python3Stderr}`);
+                  reject(new Error(`Repository ingestion failed with both python and python3: ${stderr}\n${python3Stderr}`));
+                  return;
+                }
+                
+                processResults(python3Stdout);
+              });
+              
+              return;
+            }
+            
             reject(new Error(`Repository ingestion failed: ${stderr}`));
             return;
           }
           
+          processResults(stdout);
+        });
+        
+        // Helper function to process results
+        const processResults = (output: string) => {
           // Parse output files from the metadata file
           try {
-            const metadataPath = path.join(this.tempDir, `${repoId || path.basename(repoPath)}_metadata.json`);
+            const baseName = repoId || path.basename(repoPath);
+            const metadataPath = path.join(this.tempDir, `${baseName}_metadata.json`);
+            
+            logger.info(`Checking for metadata file at: ${metadataPath}`);
+            
             if (fs.existsSync(metadataPath)) {
+              logger.info(`Reading metadata from: ${metadataPath}`);
               const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
               resolve(metadata);
             } else {
+              // Try to list files in temp directory to debug
+              try {
+                const tempFiles = fs.readdirSync(this.tempDir);
+                logger.info(`Files in temp directory (${this.tempDir}): ${tempFiles.join(', ')}`);
+              } catch (readErr) {
+                logger.error(`Failed to read temp directory: ${readErr}`);
+              }
+              
               // If metadata file not found, construct basic response
+              logger.warn(`Metadata file not found at ${metadataPath}, constructing basic response`);
               resolve({
                 processed: true,
-                message: stdout,
+                message: output,
                 files: {
-                  summary: path.join(this.tempDir, `${repoId || path.basename(repoPath)}_summary.txt`),
-                  tree: path.join(this.tempDir, `${repoId || path.basename(repoPath)}_tree.txt`),
-                  content: path.join(this.tempDir, `${repoId || path.basename(repoPath)}_content.txt`),
-                }
+                  summary: path.join(this.tempDir, `${baseName}_summary.txt`),
+                  tree: path.join(this.tempDir, `${baseName}_tree.txt`),
+                  content: path.join(this.tempDir, `${baseName}_content.txt`),
+                },
+                warning: `Metadata file not found at ${metadataPath}. This may indicate issues with gitingest processing.`
               });
             }
           } catch (err) {
             logger.error(`Error parsing metadata: ${err}`);
             reject(err);
           }
-        });
+        };
       });
     } catch (error) {
       logger.error(`Error processing repository: ${error}`);

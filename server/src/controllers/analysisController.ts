@@ -12,11 +12,13 @@ import path from 'path';
 import { SimpleGit, simpleGit } from 'simple-git';
 import { v4 as uuidv4 } from 'uuid';
 import { promisify } from 'util';
+import { exec } from 'child_process';
 
 // Import rimraf with any type to avoid TS errors
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const rimraf = require('rimraf');
 const rimrafPromise = promisify(rimraf);
+const execPromise = promisify(exec);
 
 /**
  * Get all analyses for the authenticated user
@@ -119,13 +121,33 @@ export const processRepositoryWithGitIngest = async (req: Request, res: Response
       return next(new AppError('Not authorized', 403));
     }
     
+    logger.info(`Processing repository with gitingest: ${repository.name} (${repositoryId})`);
+    
     const repoId = (repository._id as Types.ObjectId).toString();
     let repoPath: string = '';
     let temporaryRepoCreated = false;
     
     try {
+      // Check if Python/gitingest is installed before proceeding
+      try {
+        await execPromise('python -c "import gitingest"');
+      } catch (pythonError) {
+        logger.error(`Python/gitingest check failed: ${pythonError}`);
+        // Instead of failing silently, return a detailed error to the client
+        return next(new AppError('Python or gitingest library is not available. Please ensure Python and gitingest are properly installed.', 500));
+      }
+      
       // First check if the repository already exists in temp directory
-      const repoFolders = fs.readdirSync(repositoryIngestService.tempDir);
+      let repoFolders = [];
+      try {
+        repoFolders = fs.readdirSync(repositoryIngestService.tempDir);
+      } catch (readError) {
+        logger.error(`Error reading temp directory: ${readError}`);
+        await fs.promises.mkdir(repositoryIngestService.tempDir, { recursive: true });
+        logger.info(`Created temp directory: ${repositoryIngestService.tempDir}`);
+        repoFolders = [];
+      }
+      
       const repoFolder = repoFolders.find(folder => folder.startsWith(repoId));
       
       if (repoFolder) {
@@ -138,43 +160,74 @@ export const processRepositoryWithGitIngest = async (req: Request, res: Response
         repoPath = path.join(repositoryIngestService.tempDir, `${repoId}-${Date.now()}`);
         logger.info(`Cloning repository to temporary folder: ${repoPath}`);
         
-        // Clone the repository (similar to analyzeRepository)
-        const git: SimpleGit = simpleGit();
-        const cloneUrl = repository.cloneUrl.replace(
-          'https://',
-          `https://${user.githubToken}@`
-        );
-        
-        await git.clone(cloneUrl, repoPath);
-        
-        // Check out the default branch
-        const localGit = simpleGit(repoPath);
-        await localGit.checkout(repository.defaultBranch || 'main');
+        try {
+          // Clone the repository (similar to analyzeRepository)
+          const git: SimpleGit = simpleGit();
+          const cloneUrl = repository.cloneUrl.replace(
+            'https://',
+            `https://${user.githubToken}@`
+          );
+          
+          await git.clone(cloneUrl, repoPath);
+          
+          // Check out the default branch
+          const localGit = simpleGit(repoPath);
+          await localGit.checkout(repository.defaultBranch || 'main');
+        } catch (gitError) {
+          logger.error(`Git clone error: ${gitError}`);
+          return next(new AppError(`Failed to clone repository: ${gitError.message}`, 500));
+        }
       }
       
       // Process the repository with gitingest using the path
-      const result = await repositoryIngestService.processRepository(repoPath, repoId);
-      
-      // Clean up temporary repo if we created one
-      if (temporaryRepoCreated) {
-        await rimrafPromise(repoPath);
+      try {
+        const result = await repositoryIngestService.processRepository(repoPath, repoId);
+        
+        // Clean up temporary repo if we created one
+        if (temporaryRepoCreated) {
+          try {
+            await rimrafPromise(repoPath);
+          } catch (cleanupError) {
+            logger.warn(`Failed to clean up temporary repository, but processing succeeded: ${cleanupError}`);
+          }
+        }
+        
+        res.json({
+          success: true,
+          message: 'Repository processed with gitingest',
+          result
+        });
+      } catch (processError) {
+        logger.error(`Repository processing error: ${processError}`);
+        
+        // Clean up temporary repo if we created one and an error occurred
+        if (temporaryRepoCreated && repoPath && fs.existsSync(repoPath)) {
+          try {
+            await rimrafPromise(repoPath);
+          } catch (cleanupError) {
+            logger.warn(`Failed to clean up temporary repository after error: ${cleanupError}`);
+          }
+        }
+        
+        // Return a more detailed error response to the client
+        return next(new AppError(`Repository processing failed: ${processError.message}`, 500));
       }
-      
-      res.json({
-        success: true,
-        message: 'Repository processed with gitingest',
-        result
-      });
     } catch (error) {
       // Clean up temporary repo if we created one and an error occurred
       if (temporaryRepoCreated && repoPath && fs.existsSync(repoPath)) {
-        await rimrafPromise(repoPath);
+        try {
+          await rimrafPromise(repoPath);
+        } catch (cleanupError) {
+          logger.warn(`Failed to clean up temporary repository after error: ${cleanupError}`);
+        }
       }
-      throw error;
+      
+      logger.error(`Error in processRepositoryWithGitIngest: ${error}`);
+      next(new AppError(`Repository processing failed: ${error.message}`, 500));
     }
   } catch (error) {
     logger.error(`Error processing repository with gitingest: ${error}`);
-    next(error);
+    next(new AppError(`Repository processing failed: ${error.message}`, 500));
   }
 };
 
@@ -395,6 +448,14 @@ export const processPublicRepositoryWithGitIngest = async (req: Request, res: Re
       return next(new AppError('Invalid GitHub repository URL', 400));
     }
     
+    // Check if Python/gitingest is installed before proceeding
+    try {
+      await execPromise('python -c "import gitingest"');
+    } catch (pythonError) {
+      logger.error(`Python/gitingest check failed: ${pythonError}`);
+      return next(new AppError('Python or gitingest library is not available. Please ensure Python and gitingest are properly installed.', 500));
+    }
+    
     // Generate a unique ID for this repository processing
     const processingId = uuidv4();
     const repoPath = path.join(repositoryIngestService.tempDir, `public-${processingId}`);
@@ -402,21 +463,37 @@ export const processPublicRepositoryWithGitIngest = async (req: Request, res: Re
     // Process the repository with gitingest directly using the URL
     logger.info(`Processing public repository with gitingest: ${repositoryUrl}`);
     
-    // Pass URL directly to gitingest through our service
-    const result = await repositoryIngestService.processRepository(repositoryUrl, processingId);
-    
-    // Get the repository content
-    const content = await repositoryIngestService.getRepositoryContent(processingId);
-    
-    res.json({
-      success: true,
-      message: 'Repository processed with gitingest',
-      processingId,
-      content
-    });
+    try {
+      // Pass URL directly to gitingest through our service
+      const result = await repositoryIngestService.processRepository(repositoryUrl, processingId);
+      
+      try {
+        // Get the repository content
+        const content = await repositoryIngestService.getRepositoryContent(processingId);
+        
+        res.json({
+          success: true,
+          message: 'Repository processed with gitingest',
+          processingId,
+          content
+        });
+      } catch (contentError) {
+        logger.error(`Error getting repository content: ${contentError}`);
+        res.status(206).json({
+          success: true,
+          message: 'Repository processed with gitingest, but content retrieval failed',
+          processingId,
+          result,
+          error: contentError.message
+        });
+      }
+    } catch (processError) {
+      logger.error(`Error processing public repository: ${processError}`);
+      return next(new AppError(`Repository processing failed: ${processError.message}`, 500));
+    }
   } catch (error) {
     logger.error(`Error processing public repository: ${error}`);
-    next(error);
+    next(new AppError(`Repository processing failed: ${error.message}`, 500));
   }
 };
 
