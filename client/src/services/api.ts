@@ -25,6 +25,9 @@ export const repositoryApi = {
   syncRepositories: (force = false) => api.post('/repositories/sync', { force }),
   getRepositoryById: (id: string) => api.get(`/repositories/${id}`),
   getRepositoryBranches: (id: string) => api.get(`/repositories/${id}/branches`),
+  // Repository favorites related methods
+  getFavoriteRepositories: () => api.get('/repositories/favorites'),
+  toggleFavorite: (id: string) => api.post(`/repositories/${id}/favorite`),
   // Repository ingest related methods
   checkRepositoryProcessed: (id: string) => api.get(`/analysis/repository/${id}/processed`),
   getRepositoryIngestData: (id: string, contentType?: string) => 
