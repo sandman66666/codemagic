@@ -11,8 +11,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noImplicitAny": false,  // Add this line to allow implicit any types
-    "suppressImplicitAnyIndexErrors": true  // Add this line
+    "noImplicitAny": false  // Add this line to allow implicit any types
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "**/*.test.ts", "src/tests/**/*"]  // Update to exclude test files
