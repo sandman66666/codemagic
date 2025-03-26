@@ -10,6 +10,7 @@ This guide explains how to deploy the CodeInsight application to Heroku.
 - MongoDB Atlas account (for the database)
 - GitHub OAuth Application (for authentication)
 - OpenAI API key (for AI features)
+- Python installed (for repository analysis features)
 
 ## Important Configuration Notes
 
@@ -18,6 +19,14 @@ TypeScript has been added as a dependency in both the root package.json and serv
 
 ### Node.js Engine Configuration
 The package.json file specifies Node.js 18.x as the required engine. This is important because Heroku requires a specific Node.js version range rather than an open-ended range (like >=18.x).
+
+### Python Requirement - CRITICAL
+The application uses a Python script (repository-ingest.py) with the gitingest package for repository analysis. You must add the Python buildpack to your Heroku application to ensure this functionality works correctly.
+
+If you don't add the Python buildpack, you will encounter the following error:
+```
+Error: spawn python ENOENT
+```
 
 ### Build Process and Package Management
 The application uses multiple strategies to ensure proper deployment on Heroku:
@@ -55,7 +64,48 @@ heroku create your-app-name
 heroku git:remote -a your-app-name
 ```
 
-### 2. Configure Environment Variables
+### 2. Add Required Buildpacks
+
+The application requires both Node.js and Python. Add both buildpacks to your Heroku app:
+
+```bash
+# Add Node.js buildpack (default)
+heroku buildpacks:add heroku/nodejs
+
+# Add Python buildpack
+heroku buildpacks:add heroku/python
+
+# Verify the buildpacks
+heroku buildpacks
+```
+
+The output should show both buildpacks in the correct order (Node.js first, then Python):
+
+```
+=== your-app-name Buildpack URLs
+1. heroku/nodejs
+2. heroku/python
+```
+
+If you need to set the order specifically:
+
+```bash
+heroku buildpacks:clear
+heroku buildpacks:add heroku/nodejs
+heroku buildpacks:add heroku/python
+```
+
+### 3. Create requirements.txt for Python dependencies
+
+Create a `requirements.txt` file in the root of your project with the following content:
+
+```
+gitingest>=0.1.0
+```
+
+This tells Heroku to install the gitingest Python package needed by repository-ingest.py.
+
+### 4. Configure Environment Variables
 
 Set up all required environment variables in Heroku:
 
