@@ -6,7 +6,8 @@ import {
   getUserStats,
   getFavoriteRepositories,
   addRepositoryToFavorites,
-  removeRepositoryFromFavorites
+  removeRepositoryFromFavorites,
+  getRecentIngestedRepositories
 } from '../controllers/userController';
 import { validate } from '../middleware/validation';
 import { rateLimiter } from '../middleware/rateLimiter';
@@ -48,6 +49,11 @@ router.get('/stats', auth, getUserStats);
 // @desc    Get user's favorite repositories
 // @access  Private
 router.get('/favorites', auth, getFavoriteRepositories);
+
+// @route   GET /api/users/recent-repositories
+// @desc    Get user's recently ingested repositories
+// @access  Private
+router.get('/recent-repositories', auth, getRecentIngestedRepositories);
 
 // @route   POST /api/users/favorites/:repositoryId
 // @desc    Add a repository to favorites

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import User from '../models/User';
 import Repository from '../models/Repository';
 import Analysis from '../models/Analysis';
+import IngestedRepository from '../models/IngestedRepository';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
@@ -172,6 +173,33 @@ export const removeRepositoryFromFavorites = async (req: Request, res: Response,
     // In a real implementation, you would remove the repository from a favorites collection or field
     res.json({ message: 'Repository removed from favorites' });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get user's recently ingested repositories
+ */
+export const getRecentIngestedRepositories = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user as any;
+    const limit = Number(req.query.limit) || 10; // Default to 10 repositories
+    
+    // Find repositories that the user has ingested, sorted by most recent
+    const recentRepos = await IngestedRepository.find({ user: user._id })
+      .select('_id repositoryUrl githubMetadata isPublic createdAt')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    
+    logger.info(`Retrieved ${recentRepos.length} recent repositories for user ${user.username}`);
+    
+    res.json({
+      count: recentRepos.length,
+      repositories: recentRepos
+    });
+  } catch (error) {
+    logger.error(`Error retrieving recent repositories: ${error.message}`);
     next(error);
   }
 };

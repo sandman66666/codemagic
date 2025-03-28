@@ -3,40 +3,43 @@ import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Button,
-  Container,
-  Heading,
   Text,
-  Stack,
+  Heading,
   Flex,
-  Icon,
-  SimpleGrid,
-  useColorModeValue,
   Input,
-  FormControl,
-  FormHelperText,
-  Alert,
-  AlertIcon,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  useToast,
-  Spinner,
-  IconButton,
-  Tooltip,
   VStack,
   HStack,
+  Badge,
+  IconButton,
+  Tooltip,
   Modal,
   ModalOverlay,
   ModalContent,
   ModalHeader,
-  ModalFooter,
   ModalBody,
+  ModalFooter,
   ModalCloseButton,
-  useDisclosure,
+  Alert,
+  AlertIcon,
+  Tabs,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Spinner,
+  Stack,
   Checkbox,
-  Badge,
+  Link,
+  useToast,
+  useDisclosure,
+  useColorModeValue,
+  useColorMode,
+  Code,
+  Container,
+  FormControl,
+  FormHelperText,
+  SimpleGrid,
+  Icon,
   Collapse,
 } from '@chakra-ui/react';
 import { FiCode, FiShield, FiBarChart2, FiCopy, FiGithub, FiSettings, FiChevronDown, FiChevronRight, FiFile, FiFolder } from 'react-icons/fi';
@@ -45,6 +48,9 @@ import axios from 'axios';
 import AiInsightsTab from '../components/AiInsightsTab';
 import CoreElementsTab from '../components/CoreElementsTab';
 import IosAppTab from '../components/IosAppTab';
+import RecentRepositories from '../components/RecentRepositories';
+import RepositoryAnalysisView from '../components/RepositoryAnalysisView';
+import useRepositoryAnalysis from '../hooks/useRepositoryAnalysis';
 
 // File Tree View Component
 interface FileTreeNodeProps {
@@ -71,8 +77,9 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
   level = 0
 }) => {
   const [isOpen, setIsOpen] = useState(level < 2); // Auto-expand first two levels
-  const bg = useColorModeValue('gray.50', 'gray.700');
-  const hoverBg = useColorModeValue('gray.100', 'gray.600');
+  const { colorMode } = useColorMode();
+  const bg = colorMode === 'light' ? 'gray.50' : 'gray.700';
+  const hoverBg = colorMode === 'light' ? 'gray.100' : 'gray.600';
 
   if (isFile && path) {
     // File node
@@ -239,276 +246,79 @@ const Feature = ({ title, text, icon }: { title: string; text: string; icon: Rea
     </Stack>
   );
 };
+
 const HomePage: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
   const [repositoryUrl, setRepositoryUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     summary: string;
     tree: string;
     content: string;
   } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const toast = useToast();
+  const { colorMode } = useColorMode();
   
-  // File selection state for content display filtering
-  const [availableFiles, setAvailableFiles] = useState<string[]>([]);
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
-  const [selectAll, setSelectAll] = useState(true);
-  const [fileTree, setFileTree] = useState<any>({});
-  const { isOpen: isFileSelectOpen, onOpen: onFileSelectOpen, onClose: onFileSelectClose } = useDisclosure();
+  // Use the repository analysis hook instead of local state
+  const {
+    availableFiles,
+    selectedFiles,
+    fileTree,
+    toggleFileSelection,
+    toggleSelectAll,
+    toggleDirectoryFiles,
+    getAllFilesInDir,
+    getFilteredContent,
+    isFileSelectOpen,
+    onFileSelectOpen,
+    onFileSelectClose
+  } = useRepositoryAnalysis({
+    content: result?.content,
+    summary: result?.summary,
+    fileTree: result?.tree
+  });
 
-  // Parse content to extract available files when result changes
-  useEffect(() => {
-    if (result?.content) {
-      const files = parseFilesFromContent(result.content);
-      setAvailableFiles(files);
-      setSelectedFiles(files); // Initially select all files
-      
-      // Build file tree structure
-      const tree = buildFileTree(files);
-      setFileTree(tree);
-    }
-  }, [result]);
-  
-  // Build a tree structure from file paths
-  const buildFileTree = (files: string[]) => {
-    const tree: any = {};
-    
-    files.forEach(filePath => {
-      // Split path into directories and filename
-      const parts = filePath.split(/[/\\]/);
-      let currentLevel = tree;
-      
-      // Build the tree structure
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        
-        // If it's the filename (last part)
-        if (i === parts.length - 1) {
-          if (!currentLevel.files) {
-            currentLevel.files = [];
-          }
-          currentLevel.files.push({
-            name: part,
-            path: filePath
-          });
-        } else {
-          // It's a directory
-          if (!currentLevel.dirs) {
-            currentLevel.dirs = {};
-          }
-          if (!currentLevel.dirs[part]) {
-            currentLevel.dirs[part] = {};
-          }
-          currentLevel = currentLevel.dirs[part];
-        }
-      }
-    });
-    
-    return tree;
-  };
-  
-  // Parse ingested content to extract individual files using the exact boundary format
-  const parseFilesFromContent = (content: string): string[] => {
-    const files: string[] = [];
-    console.log('Parsing repository content using exact boundary format...');
-    
-    // From the debug output, we can see the actual format is:
-    // ================================================
-    // File: filename
-    // ================================================
-    
-    // Extract using a regex that exactly matches this pattern
-    const fileHeaderRegex = /={50,}\n+File:\s*([^\n]+)\n+={50,}/g;
-    let match;
-    
-    while ((match = fileHeaderRegex.exec(content)) !== null) {
-      const filename = match[1].trim();
-      if (filename && !files.includes(filename)) {
-        console.log(`Detected file: "${filename}"`);
-        files.push(filename);
-      }
-    }
-    
-    // If we didn't find any files with the regex, try a line-by-line approach
-    if (files.length === 0) {
-      console.log("No files found with regex, trying line-by-line approach...");
-      const lines = content.split('\n');
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Look for lines that start with "File: "
-        if (line.startsWith('File:')) {
-          const filename = line.substring(5).trim();
-          if (filename && !files.includes(filename)) {
-            console.log(`Line-by-line detected file: "${filename}"`);
-            files.push(filename);
-          }
-        }
-      }
-    }
-    
-    console.log(`Total ${files.length} files detected:`, files);
-    return files;
-  };
-  
   // Handle file selection toggle
-  const toggleFileSelection = (fileName: string) => {
-    setSelectedFiles(prev => {
-      if (prev.includes(fileName)) {
-        return prev.filter(f => f !== fileName);
-      } else {
-        return [...prev, fileName];
-      }
-    });
+  const toggleFileSelectionWrapper = (fileName: string) => {
+    toggleFileSelection(fileName);
   };
-  
+
   // Toggle select all files
-  const toggleSelectAll = () => {
-    if (selectedFiles.length === availableFiles.length) {
-      setSelectedFiles([]);
-      setSelectAll(false);
-    } else {
-      setSelectedFiles([...availableFiles]);
-      setSelectAll(true);
-    }
+  const toggleSelectAllWrapper = () => {
+    toggleSelectAll();
   };
-  
+
   // Toggle all files in a directory
-  const toggleDirectoryFiles = (dirFiles: string[], isSelected: boolean) => {
-    if (isSelected) {
-      // Remove all these files
-      setSelectedFiles(prev => prev.filter(f => !dirFiles.includes(f)));
-    } else {
-      // Add files that aren't already selected
-      setSelectedFiles(prev => {
-        const newSelection = [...prev];
-        dirFiles.forEach(file => {
-          if (!newSelection.includes(file)) {
-            newSelection.push(file);
-          }
-        });
-        return newSelection;
-      });
-    }
+  const toggleDirectoryFilesWrapper = (dirFiles: string[], isSelected: boolean) => {
+    toggleDirectoryFiles(dirFiles, isSelected);
   };
-  
+
   // Get all files in a directory and its subdirectories
-  const getAllFilesInDir = (dir: any): string[] => {
-    let files: string[] = [];
-    
-    // Add files in this directory
-    if (dir.files) {
-      files = files.concat(dir.files.map((file: any) => file.path));
-    }
-    
-    // Add files from subdirectories
-    if (dir.dirs) {
-      Object.entries(dir.dirs).forEach(([name, subdir]: [string, any]) => {
-        files = files.concat(getAllFilesInDir(subdir));
-      });
-    }
-    
-    return files;
+  const getAllFilesInDirWrapper = (dir: any): string[] => {
+    return getAllFilesInDir(dir);
   };
-  
-  // Ultra-simplified content filtering with extensive debugging
-  const getFilteredContent = (): string => {
-    if (!result?.content) {
-      return '';
-    }
-    
-    // If all files are selected, return the full content
-    if (selectedFiles.length === availableFiles.length) {
-      return result.content;
-    }
-    
-    // If no files are selected, return empty string
-    if (selectedFiles.length === 0) {
-      return '';
-    }
-    
-    const fullContent = result.content;
-    
-    // Debug info
-    console.log("=== DEBUG INFO ===");
-    console.log(`Selected files (${selectedFiles.length}/${availableFiles.length}): `, selectedFiles);
-    
-    // Print a sample of the content to see how files are delimited
-    console.log("Content sample (first 500 chars):");
-    console.log(fullContent.substring(0, 500));
-    console.log("End of sample");
-    
-    // Detect file sections with Line-by-line manual approach
-    // This is more robust than regex for complex formats
-    const lines = fullContent.split('\n');
-    
-    // Structure to track file sections
-    const filePositions: {filename: string, startLine: number, endLine: number}[] = [];
-    
-    let currentFile: string | null = null;
-    let startLine = 0;
-    
-    // Simple state machine to parse files
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      // Detect file header line (based on raw content sample)
-      if (line.startsWith('File:')) {
-        // If we found a new file and were tracking an old one, complete it
-        if (currentFile) {
-          filePositions.push({
-            filename: currentFile,
-            startLine: startLine,
-            endLine: i - 1
-          });
-        }
-        
-        // Extract filename
-        currentFile = line.substring(5).trim();
-        startLine = Math.max(0, i - 1); // Include header line
-      }
-    }
-    
-    // Add the last file if we were tracking one
-    if (currentFile) {
-      filePositions.push({
-        filename: currentFile,
-        startLine: startLine,
-        endLine: lines.length - 1
+
+  // Copy content to clipboard
+  const copyToClipboard = (text: string, type: string = 'Content') => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        toast({
+          title: `${type} copied to clipboard`,
+          status: "success",
+          duration: 2000,
+          isClosable: true,
+        });
+      })
+      .catch(err => {
+        toast({
+          title: "Failed to copy",
+          description: err.message,
+          status: "error",
+          duration: 2000,
+          isClosable: true,
+        });
       });
-    }
-    
-    console.log(`File detection found ${filePositions.length} files:`, 
-      filePositions.map(f => f.filename).join(', '));
-    
-    // Filter based on selected files
-    const filteredFilePositions = filePositions.filter(fileObj => 
-      selectedFiles.includes(fileObj.filename));
-    
-    console.log(`After filtering, keeping ${filteredFilePositions.length} files:`, 
-      filteredFilePositions.map(f => f.filename).join(', '));
-    
-    // Rebuild content from selected files
-    let filteredLines: string[] = [];
-    
-    filteredFilePositions.forEach(fileObj => {
-      // Add the lines for this file
-      const fileLines = lines.slice(fileObj.startLine, fileObj.endLine + 1);
-      filteredLines = filteredLines.concat(fileLines);
-      
-      // Add an empty line between files for better formatting
-      if (filteredLines.length > 0) {
-        filteredLines.push('');
-      }
-    });
-    
-    const filteredContent = filteredLines.join('\n');
-    console.log(`Filtered content has ${filteredContent.length} characters`);
-    
-    return filteredContent;
   };
 
   const handleRepositoryUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -569,6 +379,7 @@ const HomePage: React.FC = () => {
       const gitHubInfo = extractGitHubInfo(repositoryUrl);
       
       // Check if user is authenticated and if the repository belongs to the current user
+      // Try to process as user's private repository
       if (isAuthenticated && user && gitHubInfo && gitHubInfo.username === user.username) {
         // Try to process as user's private repository
         try {
@@ -640,18 +451,16 @@ const HomePage: React.FC = () => {
     }
   };
 
-  const copyToClipboard = (text: string, type: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: `${type} copied to clipboard`,
-      status: 'success',
-      duration: 2000,
-      isClosable: true,
-    });
-  };
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get('url');
+    if (urlParam) {
+      setRepositoryUrl(urlParam);
+    }
+  }, []);
 
   return (
-    <Box bg={useColorModeValue('gray.50', 'gray.900')} minH="100vh">
+    <Box bg={colorMode === 'light' ? 'gray.50' : 'gray.900'} minH="100vh">
       <Container maxW={{ base: '95%', md: '90%', lg: '4xl' }} pt={{ base: 5, md: 10 }} pb={{ base: 5, md: 10 }}>
         <VStack spacing={{ base: 6, md: 10 }}>
           {/* Hero Section */}
@@ -698,7 +507,7 @@ const HomePage: React.FC = () => {
             w="full"
             p={{ base: 4, md: 6 }}
             borderRadius="lg"
-            bg={useColorModeValue('white', 'gray.700')}
+            bg={colorMode === 'light' ? 'white' : 'gray.700'}
             boxShadow="md"
           >
             <VStack spacing={4}>
@@ -770,7 +579,7 @@ const HomePage: React.FC = () => {
               )}
             </VStack>
           </Box>
-
+          
           {/* Loading Section */}
           {isLoading && (
             <Box textAlign="center" py={6}>
@@ -785,220 +594,88 @@ const HomePage: React.FC = () => {
               w="full"
               p={{ base: 3, md: 6 }}
               borderRadius="lg"
-              bg={useColorModeValue('white', 'gray.700')}
+              bg={colorMode === 'light' ? 'white' : 'gray.700'}
               boxShadow="md"
             >
               <Heading as="h3" size={{ base: "sm", md: "md" }} mb={4} textAlign="center">
                 Analysis Results
               </Heading>
               
-              <Tabs colorScheme="brand" variant="enclosed" isFitted size={{ base: "sm", md: "md" }}>
-                <TabList overflowX={{ base: "auto", md: "visible" }} flexWrap={{ base: "nowrap", md: "wrap" }}>
-                  <Tab minW={{ base: "100px", md: "auto" }}>Content</Tab>
-                  <Tab minW={{ base: "100px", md: "auto" }}>Summary</Tab>
-                  <Tab minW={{ base: "100px", md: "auto" }}>File Tree</Tab>
-                  <Tab minW={{ base: "100px", md: "auto" }}>AI Insights</Tab>
-                  <Tab minW={{ base: "100px", md: "auto" }}>Core Elements</Tab>
-                  <Tab minW={{ base: "100px", md: "auto" }}>iOS App</Tab>
-                </TabList>
-                
-                <TabPanels>
-                  <TabPanel p={{ base: 2, md: 4 }}>
-                    <Flex justify="space-between" mb={2} direction={{ base: "column", sm: "row" }} gap={2}>
-                      <HStack>
-                        <Badge colorScheme="blue">
-                          {selectedFiles.length} of {availableFiles.length} files
-                        </Badge>
-                      </HStack>
-                      
-                      <HStack justifyContent={{ base: "flex-start", sm: "flex-end" }} width={{ base: "100%", sm: "auto" }}>
-                        <Tooltip label="Select files to display">
-                          <IconButton
-                            aria-label="File settings"
-                            icon={<FiSettings />}
-                            size="sm"
-                            onClick={onFileSelectOpen}
-                          />
-                        </Tooltip>
-                        
-                        <Tooltip label="Copy to clipboard">
-                          <IconButton
-                            aria-label="Copy content"
-                            icon={<FiCopy />}
-                            size="sm"
-                            onClick={() => copyToClipboard(getFilteredContent(), 'Content')}
-                          />
-                        </Tooltip>
-                      </HStack>
-                    </Flex>
-                    <Box
-                      p={{ base: 2, md: 4 }}
-                      borderRadius="md"
-                      bg={useColorModeValue('gray.50', 'gray.800')}
-                      overflowY="auto"
-                      maxHeight={{ base: "300px", md: "500px" }}
-                      whiteSpace="pre-wrap"
-                      fontFamily="monospace"
-                      fontSize={{ base: "xs", md: "sm" }}
-                    >
-                      {getFilteredContent()}
-                    </Box>
-                  </TabPanel>
-                  
-                  <TabPanel p={{ base: 2, md: 4 }}>
-                    <Flex justify="flex-end" mb={2}>
-                      <Tooltip label="Copy to clipboard">
-                        <IconButton
-                          aria-label="Copy summary"
-                          icon={<FiCopy />}
-                          size="sm"
-                          onClick={() => copyToClipboard(result.summary, 'Summary')}
-                        />
-                      </Tooltip>
-                    </Flex>
-                    <Box
-                      p={{ base: 2, md: 4 }}
-                      borderRadius="md"
-                      bg={useColorModeValue('gray.50', 'gray.800')}
-                      overflowY="auto"
-                      maxHeight={{ base: "300px", md: "500px" }}
-                      whiteSpace="pre-wrap"
-                      fontSize={{ base: "xs", md: "sm" }}
-                    >
-                      {result.summary}
-                    </Box>
-                  </TabPanel>
-                  
-                  <TabPanel p={{ base: 2, md: 4 }}>
-                    <Box 
-                      p={{ base: 2, md: 4 }}
-                      borderRadius="md"
-                      bg={useColorModeValue('gray.50', 'gray.800')}
-                      overflowY="auto"
-                      maxHeight={{ base: "300px", md: "500px" }}
-                      fontSize={{ base: "xs", md: "sm" }}
-                    >
-                      {result.tree}
-                    </Box>
-                  </TabPanel>
-                  
-                  {/* AI Insights Tab */}
-                  <TabPanel>
-                    <AiInsightsTab 
-                      repositoryUrl={repositoryUrl} 
-                      onCopyToClipboard={copyToClipboard} 
-                    />
-                  </TabPanel>
-                  
-                  {/* Core Elements Tab */}
-                  <TabPanel>
-                    <CoreElementsTab 
-                      repositoryUrl={repositoryUrl} 
-                      onCopyToClipboard={copyToClipboard} 
-                    />
-                  </TabPanel>
-                  
-                  {/* iOS App Tab */}
-                  <TabPanel>
-                    <IosAppTab 
-                      repositoryUrl={repositoryUrl} 
-                      onCopyToClipboard={copyToClipboard} 
-                    />
-                  </TabPanel>
-                </TabPanels>
-              </Tabs>
+              <RepositoryAnalysisView 
+                content={result.content}
+                summary={result.summary}
+                fileTree={result.tree}
+                onCopyToClipboard={copyToClipboard}
+                showFileSelector={true}
+                selectedFiles={selectedFiles}
+                availableFiles={availableFiles}
+                onFileSelectOpen={onFileSelectOpen}
+                getFilteredContent={getFilteredContent}
+                showAllTabs={true}
+                AIComponents={{
+                  AiInsightsTab: <AiInsightsTab 
+                                    repositoryUrl={repositoryUrl} 
+                                    onCopyToClipboard={copyToClipboard} 
+                                  />,
+                  CoreElementsTab: <CoreElementsTab 
+                                     repositoryUrl={repositoryUrl} 
+                                     onCopyToClipboard={copyToClipboard} 
+                                   />,
+                  IosAppTab: <IosAppTab 
+                               repositoryUrl={repositoryUrl} 
+                               onCopyToClipboard={copyToClipboard} 
+                             />
+                }}
+              />
             </Box>
           )}
           {/* File Selection Modal */}
-          <Modal isOpen={isFileSelectOpen} onClose={onFileSelectClose} size={{ base: "sm", md: "md", lg: "lg" }}>
+          <Modal
+            isOpen={isFileSelectOpen}
+            onClose={onFileSelectClose}
+            size="md"
+          >
             <ModalOverlay />
             <ModalContent>
-              <ModalHeader fontSize={{ base: "md", md: "lg" }}>Select Files to Display</ModalHeader>
+              <ModalHeader>Select Files to Display</ModalHeader>
               <ModalCloseButton />
               <ModalBody>
-                <VStack align="stretch" spacing={4}>
-                  <Flex justify="space-between" align="center">
-                    <Text fontSize={{ base: "sm", md: "md" }}>
-                      {selectedFiles.length} of {availableFiles.length} files selected
-                    </Text>
-                    <Button size="sm" onClick={toggleSelectAll}>
-                      {selectedFiles.length === availableFiles.length ? 'Deselect All' : 'Select All'}
-                    </Button>
-                  </Flex>
-                  
-                  <Box 
-                    borderWidth="1px" 
-                    borderRadius="md" 
-                    p={2}
-                    maxHeight={{ base: "250px", md: "350px" }} 
-                    overflowY="auto"
-                    fontSize={{ base: "xs", md: "sm" }}
-                  >
-                    {availableFiles.length === 0 ? (
-                      <Box p={5} borderWidth="1px" borderRadius="md" bg="gray.50" textAlign="center">
-                        <Text color="gray.500">No files detected in the repository content.</Text>
-                        <Text fontSize="sm" mt={2}>Try processing a different repository or check the content format.</Text>
-                      </Box>
-                    ) : (
-                      <Box 
-                        p={2}
-                        borderRadius="md"
-                        bg={useColorModeValue('white', 'gray.700')}
-                      >
-                        {Object.keys(fileTree).length === 0 ? (
-                          // Flat file list fallback
-                          <VStack align="stretch" spacing={1}>
-                            {availableFiles.map((file) => (
-                              <Flex 
-                                key={file} 
-                                p={2} 
-                                borderRadius="md" 
-                                _hover={{ bg: 'gray.100' }}
-                                onClick={() => toggleFileSelection(file)}
-                                cursor="pointer"
-                                align="center"
-                              >
-                                <Checkbox 
-                                  isChecked={selectedFiles.includes(file)}
-                                  mr={2}
-                                  onChange={(e) => {
-                                    e.stopPropagation();
-                                    toggleFileSelection(file);
-                                  }}
-                                />
-                                <Text>{file}</Text>
-                              </Flex>
-                            ))}
-                          </VStack>
-                        ) : (
-                          // Tree view
-                          <FileTreeView 
-                            tree={fileTree} 
-                            selectedFiles={selectedFiles}
-                            toggleFile={toggleFileSelection}
-                            toggleDirectory={toggleDirectoryFiles}
-                            getAllFilesInDir={getAllFilesInDir}
-                          />
-                        )}
-                      </Box>
-                    )}
-                  </Box>
-                  
-                  <Box p={3} borderWidth="1px" borderRadius="md" bg="blue.50">
-                    <Text fontSize="sm">
-                      Select which files you want to display in the Content tab. Changes will apply immediately when you close this dialog.
-                    </Text>
-                  </Box>
-                </VStack>
+                <Checkbox
+                  isChecked={selectedFiles.length === availableFiles.length}
+                  onChange={toggleSelectAll}
+                  mb={4}
+                >
+                  Select All ({availableFiles.length} files)
+                </Checkbox>
+                
+                <Stack spacing={1} maxH="60vh" overflowY="auto">
+                  <FileTreeView 
+                    tree={fileTree}
+                    selectedFiles={selectedFiles}
+                    toggleFile={toggleFileSelectionWrapper}
+                    toggleDirectory={toggleDirectoryFilesWrapper}
+                    getAllFilesInDir={getAllFilesInDirWrapper}
+                  />
+                </Stack>
               </ModalBody>
               
               <ModalFooter>
-                <Button variant="outline" onClick={onFileSelectClose}>
-                  Close
-                </Button>
+                <Button onClick={onFileSelectClose}>Close</Button>
               </ModalFooter>
             </ModalContent>
           </Modal>
+          {/* Recent Repositories Section - Only shown when user is authenticated */}
+          {isAuthenticated && !result && (
+            <Box
+              w="full"
+              p={{ base: 4, md: 6 }}
+              borderRadius="lg"
+              bg={colorMode === 'light' ? 'white' : 'gray.700'}
+              boxShadow="md"
+            >
+              <RecentRepositories limit={5} />
+            </Box>
+          )}
           {/* Features Section */}
           <Box w="full" py={10}>
             <Heading as="h2" size={{ base: "lg", md: "xl" }} textAlign="center" mb={10}>

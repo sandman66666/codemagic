@@ -219,4 +219,42 @@ router.get('/ingested-repositories', async (req, res) => {
   }
 });
 
+// @route   GET /api/analysis/ingested-repositories/:id
+// @desc    Get a specific ingested repository by ID
+// @access  Public
+router.get('/ingested-repositories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Repository ID is required' 
+      });
+    }
+    
+    const ingestedRepo = await IngestedRepository.findById(id).lean();
+    
+    if (!ingestedRepo) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Repository not found' 
+      });
+    }
+    
+    logger.info(`Retrieved ingested repository with ID: ${id}`);
+    
+    res.json({
+      success: true,
+      repository: ingestedRepo
+    });
+  } catch (error) {
+    logger.error(`Error retrieving ingested repository: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;
