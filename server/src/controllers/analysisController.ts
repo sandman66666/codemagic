@@ -237,7 +237,7 @@ export const processRepositoryWithGitIngest = async (req: Request, res: Response
             },
             // Add GitHub metadata if available
             githubMetadata: githubMetadata || undefined,
-            isPublic: false
+            isPublic: githubMetadata ? !githubMetadata.isPrivate : true
           });
           
           // Save to database
@@ -592,7 +592,7 @@ export const processPublicRepositoryWithGitIngest = async (req: Request, res: Re
             },
             // Add GitHub metadata if available
             githubMetadata: githubMetadata || undefined,
-            isPublic: true
+            isPublic: githubMetadata ? !githubMetadata.isPrivate : true
           });
           
           // Save to database

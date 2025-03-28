@@ -28,7 +28,12 @@ router.get('/', async (req, res) => {
         content: 'Test content',
         summary: 'Test summary',
       },
-      isPublic: true
+      // For test data, set a sample githubMetadata with isPrivate: false to make it public
+      githubMetadata: {
+        isPrivate: false,
+        fullName: 'test/repo'
+      },
+      isPublic: true // For test data, explicitly set to true which matches !isPrivate
     });
     
     // Save the test record

@@ -2,14 +2,20 @@ import express from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import IngestedRepository from '../models/IngestedRepository';
+import AIInsight from '../models/AIInsight';
 import { extractGitHubInfo } from '../utils/githubUtils';
 import { logger } from '../utils/logger';
+import mongoose from 'mongoose';
+import { RepositoryIngestService } from '../services/repositoryIngestService';
 
 dotenv.config();
 
 const router = express.Router();
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const MAX_CONTENT_TOKENS = 90000; // Limiting content size to avoid token limits
+
+// Initialize the repository ingest service
+const repositoryIngestService = new RepositoryIngestService();
 
 // Middleware to check if API key is configured
 const checkApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -22,7 +28,18 @@ const checkApiKey = (req: express.Request, res: express.Response, next: express.
 };
 
 /**
- * Get repository content from IngestedRepository model
+ * Helper function to truncate content to a specific length
+ */
+const truncateContent = (content: string | null, maxLength = 80000): string => {
+  if (!content) return 'Repository content unavailable';
+  if (content.length <= maxLength) return content;
+  
+  return content.substring(0, maxLength) + 
+    "\n\n[Content truncated due to length limitations. This is a portion of the full repository content.]";
+};
+
+/**
+ * Fetch repository content from the ingested repository or the files
  */
 const getRepositoryContent = async (repositoryUrl: string): Promise<{ content: string | null, metadata: any }> => {
   try {
@@ -60,130 +77,179 @@ const getRepositoryContent = async (repositoryUrl: string): Promise<{ content: s
     
     logger.info(`Found ingested repository for: ${repositoryUrl}, ID: ${ingestedRepo._id}`);
     
-    // Extract content and metadata
-    const repoContent = ingestedRepo.ingestData?.content || null;
-    const repoMetadata = ingestedRepo.githubMetadata || null;
-    
-    return { 
-      content: repoContent, 
-      metadata: repoMetadata 
-    };
+    // Use the repository ingest service to get the full content from the files
+    try {
+      const repoId = ingestedRepo._id.toString();
+      const fullContent = await repositoryIngestService.getRepositoryContent(repoId);
+      
+      // Log content size to debug
+      logger.info(`Content size from files for ${repositoryUrl}: ${fullContent.content.length} characters`);
+      logger.info(`Content sample: ${fullContent.content.substring(0, 200)}...`);
+      
+      return { 
+        content: fullContent.content,
+        metadata: ingestedRepo.githubMetadata || null
+      };
+    } catch (contentError) {
+      // If we can't read from files, fall back to the content in the database
+      logger.warn(`Failed to read content from files: ${contentError.message}`);
+      logger.warn(`Falling back to database content for ${repositoryUrl}`);
+      
+      const dbContent = ingestedRepo.ingestData?.content || null;
+      
+      // Log the fallback content size
+      logger.info(`Fallback content size for ${repositoryUrl}: ${dbContent ? dbContent.length : 0} characters`);
+      if (dbContent) {
+        logger.info(`Fallback content sample: ${dbContent.substring(0, 200)}...`);
+      }
+      
+      return { 
+        content: dbContent,
+        metadata: ingestedRepo.githubMetadata || null 
+      };
+    }
   } catch (error) {
     logger.error(`Error fetching repository content: ${error.message}`);
     return { content: null, metadata: null };
   }
 };
 
-/**
- * Truncate content to avoid exceeding token limits
- */
-const truncateContent = (content: string, maxLength: number = MAX_CONTENT_TOKENS): string => {
-  if (!content || content.length <= maxLength) {
-    return content;
-  }
-  
-  // Simple truncation with a message
-  return content.substring(0, maxLength) + 
-    "\n\n[Content truncated due to length limitations. This is a portion of the full repository content.]";
-};
-
 // AI Insights endpoint
-router.post('/insights', checkApiKey, async (req: express.Request, res: express.Response) => {
+router.post('/insights', async (req: express.Request, res: express.Response) => {
   try {
-    const { repositoryUrl } = req.body;
+    const { repositoryUrl, forceRegenerate = false } = req.body;
     
     if (!repositoryUrl) {
       return res.status(400).json({ message: 'Repository URL is required' });
     }
     
-    console.log(`Generating AI insights for repository: ${repositoryUrl}`);
-    
-    // Get repository content from database
-    const { content, metadata } = await getRepositoryContent(repositoryUrl);
-    
-    let prompt = '';
-    
-    if (content) {
-      // If we have the content, use it
-      const truncatedContent = truncateContent(content);
-      prompt = `Analyze this GitHub repository with URL: ${repositoryUrl}
-      
-      The repository content is provided below:
-      \`\`\`
-      ${truncatedContent}
-      \`\`\`
-      
-      Provide detailed insights about:
-      1. Code architecture and design patterns
-      2. Code quality and potential improvements
-      3. Best practices followed or missing
-      4. Potential security concerns
-      5. Overall strengths and weaknesses
-      
-      Format your response in markdown with clear sections and bullet points where appropriate.`;
-    } else {
-      // If no content available, use the original URL-only approach
-      prompt = `Analyze this GitHub repository: ${repositoryUrl}. 
-      Provide detailed insights about:
-      1. Code architecture and design patterns
-      2. Code quality and potential improvements
-      3. Best practices followed or missing
-      4. Potential security concerns
-      5. Overall strengths and weaknesses
-      
-      Format your response in markdown with clear sections and bullet points where appropriate.
-      
-      Note: I couldn't access the full repository content, so base your analysis on what you know about this repository.`;
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(500).json({ message: 'Anthropic API key is not configured' });
     }
     
-    // Add metadata if available
-    if (metadata) {
-      prompt += `\n\nAdditional repository information:
-      - Owner: ${metadata.ownerName}
-      - Repository Name: ${metadata.repoName}
-      - Default Branch: ${metadata.defaultBranch}
-      - Stars: ${metadata.stars}
-      - Forks: ${metadata.forks}
-      - Description: ${metadata.description}
-      - Latest Commit: ${metadata.commitHash} - "${metadata.commitMessage}"`;
+    // Get user ID from session - proper way to extract authenticated user
+    const user = (req as any).user || null;
+    const userId = user ? user._id.toString() : null;
+    
+    logger.info(`Generating insights for repo ${repositoryUrl} for user: ${userId || 'anonymous'}`);
+    
+    // Normalize repository URL
+    const githubInfo = extractGitHubInfo(repositoryUrl);
+    
+    if (!githubInfo) {
+      logger.warn(`Could not extract owner/repo from URL: ${repositoryUrl}`);
+      return res.status(400).json({ message: 'Invalid repository URL' });
     }
     
-    // Call Claude API
-    const response = await axios.post(
-      'https://api.anthropic.com/v1/messages',
-      {
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 4000,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01'
-        }
+    const normalizedRepoUrl = `${githubInfo.owner}/${githubInfo.repo}`;
+    
+    // Check for existing insights if not forcing regeneration
+    if (!forceRegenerate) {
+      // Check if insights already exist for this repository
+      const query: any = { repositoryUrl: normalizedRepoUrl };
+      if (userId) {
+        query.userId = userId;
       }
-    );
+      
+      const existingInsight = await AIInsight.findOne(query).sort({ createdAt: -1 });
+      
+      if (existingInsight) {
+        logger.info(`Found existing insights for ${normalizedRepoUrl}, returning cached results`);
+        return res.json({
+          _id: existingInsight._id,
+          insights: existingInsight.insights,
+          createdAt: existingInsight.createdAt,
+          cached: true
+        });
+      }
+    }
     
-    res.json({ insights: response.data.content[0].text });
+    // Retrieve repository content
+    try {
+      const { content, metadata } = await getRepositoryContent(repositoryUrl);
+      
+      // Truncate content if too long
+      const truncatedContent = truncateContent(content, 100000);
+      
+      // Format the message for Claude
+      const message = `
+      This is a GitHub repository with the following content. Please analyze it and provide insights about:
+      
+      1. The overall architecture and design patterns
+      2. Code organization and structure
+      3. Potential issues or areas for improvement
+      4. Any security concerns
+      5. Best practices that are followed or missing
+      
+      Format your response in markdown, with appropriate headings and sections.
+      
+      Repository: ${normalizedRepoUrl}
+      
+      REPOSITORY CONTENT:
+      ${truncatedContent}
+      `;
+      
+      // Call Claude API
+      const response = await axios.post(
+        'https://api.anthropic.com/v1/messages',
+        {
+          model: 'claude-3-opus-20240229',
+          max_tokens: 4000,
+          messages: [{ role: 'user', content: message }]
+        },
+        {
+          headers: {
+            'x-api-key': ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json'
+          }
+        }
+      ).catch(error => {
+        // Capture and log the detailed API error
+        const apiError = error.response?.data?.error || error.message;
+        logger.error(`Claude API Error: ${JSON.stringify(apiError)}`);
+        
+        // Throw a clear error that will propagate to the client
+        throw new Error(`AI analysis failed: ${error.response?.data?.error?.message || 'Claude API returned an error'}`);
+      });
+      
+      if (!response.data || !response.data.content || !response.data.content[0]?.text) {
+        throw new Error('Claude API returned an invalid response format');
+      }
+      
+      const insightText = response.data.content[0].text;
+      
+      // Create the insight object
+      const insightData: any = {
+        repositoryUrl: normalizedRepoUrl,
+        insights: insightText
+      };
+      
+      // Only set userId if we have a valid user
+      if (userId) {
+        insightData.userId = userId;
+      }
+      
+      const insight = new AIInsight(insightData);
+      
+      await insight.save();
+      logger.info(`Successfully saved insights for ${normalizedRepoUrl}${userId ? ' with user: ' + userId : ''}`);
+      
+      return res.json({
+        _id: insight._id,
+        insights: insightText,
+        createdAt: insight.createdAt,
+        cached: false
+      });
+      
+    } catch (error: any) {
+      logger.error('Error retrieving repository content:', error);
+      return res.status(500).json({ message: 'Error retrieving repository content' });
+    }
+    
   } catch (error: any) {
-    console.error('Error generating AI insights:', error.response?.data || error.message);
-    
-    // Extract detailed error message if it exists
-    const errorDetails = error.response?.data?.error;
-    const detailedMessage = errorDetails?.message ? 
-      `Error generating AI insights: ${errorDetails.message}` : 
-      'Failed to generate AI insights';
-    
-    res.status(500).json({ 
-      message: detailedMessage,
-      error: error.response?.data?.error || error.message
-    });
+    logger.error('Error generating AI insights:', error);
+    return res.status(500).json({ message: 'Failed to generate AI insights' });
   }
 });
 
@@ -268,7 +334,18 @@ router.post('/core-elements', checkApiKey, async (req: express.Request, res: exp
           'anthropic-version': '2023-06-01'
         }
       }
-    );
+    ).catch(error => {
+      // Capture and log the detailed API error
+      const apiError = error.response?.data?.error || error.message;
+      logger.error(`Claude API Error: ${JSON.stringify(apiError)}`);
+      
+      // Throw a clear error that will propagate to the client
+      throw new Error(`AI analysis failed: ${error.response?.data?.error?.message || 'Claude API returned an error'}`);
+    });
+    
+    if (!response.data || !response.data.content || !response.data.content[0]?.text) {
+      throw new Error('Claude API returned an invalid response format');
+    }
     
     res.json({ elements: response.data.content[0].text });
   } catch (error: any) {
@@ -372,7 +449,18 @@ router.post('/ios-app', checkApiKey, async (req: express.Request, res: express.R
           'anthropic-version': '2023-06-01'
         }
       }
-    );
+    ).catch(error => {
+      // Capture and log the detailed API error
+      const apiError = error.response?.data?.error || error.message;
+      logger.error(`Claude API Error: ${JSON.stringify(apiError)}`);
+      
+      // Throw a clear error that will propagate to the client
+      throw new Error(`AI analysis failed: ${error.response?.data?.error?.message || 'Claude API returned an error'}`);
+    });
+    
+    if (!response.data || !response.data.content || !response.data.content[0]?.text) {
+      throw new Error('Claude API returned an invalid response format');
+    }
     
     res.json({ iosApp: response.data.content[0].text });
   } catch (error: any) {
@@ -388,6 +476,47 @@ router.post('/ios-app', checkApiKey, async (req: express.Request, res: express.R
       message: detailedMessage,
       error: error.response?.data?.error || error.message
     });
+  }
+});
+
+// Endpoint to get AI insights history for a repository
+router.get('/insights/history', async (req: express.Request, res: express.Response) => {
+  try {
+    const { repositoryUrl } = req.query;
+    console.log("Insights history requested for:", repositoryUrl);
+    
+    if (!repositoryUrl || typeof repositoryUrl !== 'string') {
+      console.log("Missing or invalid repositoryUrl in request");
+      return res.status(400).json({ message: 'Repository URL is required' });
+    }
+    
+    const githubInfo = extractGitHubInfo(repositoryUrl);
+    
+    if (!githubInfo) {
+      logger.warn(`Could not extract owner/repo from URL: ${repositoryUrl}`);
+      return res.status(400).json({ message: 'Invalid repository URL' });
+    }
+    
+    const normalizedRepoUrl = `${githubInfo.owner}/${githubInfo.repo}`;
+    console.log("Normalized repository URL:", normalizedRepoUrl);
+    
+    // Fetch all insights for this repository, ordered by most recent first
+    const insights = await AIInsight.find({ 
+      repositoryUrl: normalizedRepoUrl 
+    })
+    .sort({ createdAt: -1 })
+    .limit(10); // Limit to 10 most recent insights
+    
+    console.log(`Found ${insights.length} insights for ${normalizedRepoUrl}`);
+    
+    // If no insights found, return empty array with success true
+    return res.json({ 
+      success: true, 
+      insights 
+    });
+  } catch (error) {
+    console.error('Error fetching AI insights history:', error);
+    return res.status(500).json({ message: 'Failed to fetch insights history' });
   }
 });
 

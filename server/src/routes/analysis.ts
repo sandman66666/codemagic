@@ -143,10 +143,11 @@ router.get(
 
 // @route   POST /api/analysis/public/ingest
 // @desc    Process a public repository with gitingest without authentication
-// @access  Public
+// @access  Public, but will use user ID if authenticated
 router.post(
   '/public/ingest',
   publicRepoRateLimiter,
+  passport.authenticate('jwt', { session: false, failWithError: false }),
   processPublicRepositoryWithGitIngest
 );
 
@@ -164,7 +165,12 @@ router.get('/test-ingested-repo', async (req, res) => {
         content: 'Test content',
         summary: 'Test summary',
       },
-      isPublic: true
+      // For test data, set a sample githubMetadata with isPrivate: false to make it public
+      githubMetadata: {
+        isPrivate: false,
+        fullName: 'test/repo'
+      },
+      isPublic: true // Keep this hardcoded for test data only
     });
     
     // Try to save it

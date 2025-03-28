@@ -33,10 +33,17 @@ import {
   DrawerContent,
   DrawerCloseButton,
   Checkbox,
-  Stack
+  Stack,
+  Divider,
+  Tag,
+  TagLeftIcon,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
-import { FiGithub, FiClock, FiStar, FiGitBranch, FiEye, FiDownload } from 'react-icons/fi';
+import { FiGithub, FiStar, FiGitBranch, FiEye, FiCalendar, FiFileText, FiDatabase, FiCode } from 'react-icons/fi';
 import RepositoryAnalysisView from './RepositoryAnalysisView';
 import AiInsightsTab from './AiInsightsTab';
 import CoreElementsTab from './CoreElementsTab';
@@ -55,11 +62,15 @@ interface RecentRepository {
     stars?: number;
     forks?: number;
     description?: string;
+    isPrivate?: boolean;
   };
   ingestData?: {
     content?: string;
     summary?: string;
     fileTree?: string;
+  };
+  analysis?: {
+    fileTree?: string[];
   };
 }
 
@@ -80,9 +91,9 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRepo, setSelectedRepo] = useState<FullRepository | null>(null);
-  const [loadingRepo, setLoadingRepo] = useState<boolean>(false);
+  const [loadingRepoIds, setLoadingRepoIds] = useState<string[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
-  // Use the improved repository analysis hook
   const {
     availableFiles,
     selectedFiles,
@@ -124,6 +135,19 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
     fetchRecentRepositories();
   }, [limit]);
 
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await axios.get('/api/auth/me');
+        setIsAuthenticated(response.status === 200 && !!response.data);
+      } catch (error) {
+        setIsAuthenticated(false);
+      }
+    };
+    
+    checkAuth();
+  }, []);
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString(undefined, { 
@@ -148,7 +172,8 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
 
   const handleViewResults = async (repo: RecentRepository) => {
     try {
-      setLoadingRepo(true);
+      setLoadingRepoIds(prev => [...prev, repo._id]);
+      
       const response = await axios.get(`/api/analysis/ingested-repositories/${repo._id}`);
       if (response.data.success) {
         setSelectedRepo(response.data.repository as FullRepository);
@@ -171,7 +196,7 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
         isClosable: true,
       });
     } finally {
-      setLoadingRepo(false);
+      setLoadingRepoIds(prev => prev.filter(id => id !== repo._id));
     }
   };
 
@@ -220,78 +245,114 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
 
   return (
     <Box>
-      <Heading size="md" mb={4}>Recently Analyzed Repositories</Heading>
+      <Flex justifyContent="space-between" alignItems="center" mb={4}>
+        <HStack spacing={2} align="center">
+          <Icon as={FiCode} color="blue.500" />
+          <Heading size="md">Recently Analyzed Repositories</Heading>
+        </HStack>
+        
+        <Button
+          size="sm"
+          colorScheme="blue"
+          leftIcon={<Icon as={FiGithub} />}
+          as={RouterLink}
+          to="/"
+        >
+          Analyze New Repository
+        </Button>
+      </Flex>
+
       <List spacing={3}>
         {repositories.map((repo) => (
           <ListItem 
             key={repo._id} 
-            p={4} 
+            p={0}
             borderWidth="1px" 
             borderRadius="md" 
-            bg={bgColor} 
-            borderColor={borderColor}
+            bg={bgColor}
+            position="relative"
           >
-            <VStack align="start" spacing={2}>
-              <HStack spacing={2}>
-                <Icon as={FiGithub} />
-                <Heading size="sm" isTruncated maxW="100%">
-                  <Link 
-                    href={repo.repositoryUrl}
-                    isExternal
-                    color="blue.500"
-                  >
+            {/* Repository Type Badge */}
+            <Badge 
+              position="absolute" 
+              top={2} 
+              right={2}
+              px={2}
+              py={1}
+              borderRadius="md"
+              colorScheme={!repo.githubMetadata?.isPrivate ? "green" : "purple"}
+            >
+              {!repo.githubMetadata?.isPrivate ? "PUBLIC" : "PRIVATE"}
+            </Badge>
+            
+            <Box p={4}>
+              {/* Repository Name */}
+              <HStack mb={3}>
+                <Icon as={FiGithub} color="blue.400" />
+                <Heading size="sm" isTruncated>
+                  <Link href={repo.repositoryUrl} isExternal color="blue.500">
                     {getRepoName(repo)}
                   </Link>
                 </Heading>
-                <Badge colorScheme={repo.isPublic ? "green" : "purple"}>
-                  {repo.isPublic ? "Public" : "Private"}
-                </Badge>
               </HStack>
-
+              
+              {/* Repository Description */}
               {repo.githubMetadata?.description && (
-                <Text fontSize="sm" color="gray.500" noOfLines={2}>
+                <Text fontSize="sm" color="gray.500" noOfLines={2} mb={3}>
                   {repo.githubMetadata.description}
                 </Text>
               )}
-
-              <Flex wrap="wrap" gap={4} fontSize="sm" color="gray.500">
-                <Tooltip label="Analyzed on">
-                  <HStack>
-                    <Icon as={FiClock} />
-                    <Text>{formatDate(repo.createdAt)}</Text>
+              
+              {/* Analysis Tags */}
+              <Tag size="sm" mb={3} colorScheme="teal">
+                <TagLeftIcon as={FiDatabase} />
+                Ingested Data
+              </Tag>
+              
+              <Divider my={2} />
+              
+              <Flex justify="space-between" align="center" mt={2} wrap="wrap">
+                <HStack spacing={4} mb={[2, 0]}>
+                  {/* Files Count */}
+                  <HStack spacing={1}>
+                    <Icon as={FiFileText} color="gray.500" />
+                    <Text fontSize="sm">{6} files</Text>
                   </HStack>
-                </Tooltip>
-
-                {repo.githubMetadata?.stars !== undefined && (
-                  <Tooltip label="Stars">
-                    <HStack>
-                      <Icon as={FiStar} />
-                      <Text>{repo.githubMetadata.stars}</Text>
+                  
+                  {/* Date */}
+                  <HStack spacing={1}>
+                    <Icon as={FiCalendar} color="gray.500" />
+                    <Text fontSize="sm">{formatDate(repo.createdAt)}</Text>
+                  </HStack>
+                  
+                  {/* Stars */}
+                  {repo.githubMetadata?.stars !== undefined && (
+                    <HStack spacing={1}>
+                      <Icon as={FiStar} color="gray.500" />
+                      <Text fontSize="sm">{repo.githubMetadata.stars}</Text>
                     </HStack>
-                  </Tooltip>
-                )}
-
-                {repo.githubMetadata?.forks !== undefined && (
-                  <Tooltip label="Forks">
-                    <HStack>
-                      <Icon as={FiGitBranch} />
-                      <Text>{repo.githubMetadata.forks}</Text>
+                  )}
+                  
+                  {/* Forks */}
+                  {repo.githubMetadata?.forks !== undefined && (
+                    <HStack spacing={1}>
+                      <Icon as={FiGitBranch} color="gray.500" />
+                      <Text fontSize="sm">{repo.githubMetadata.forks}</Text>
                     </HStack>
-                  </Tooltip>
-                )}
-
-                <Button 
-                  onClick={() => handleViewResults(repo)}
-                  size="xs"
+                  )}
+                </HStack>
+                
+                <Button
                   colorScheme="blue"
+                  size="sm"
+                  onClick={() => handleViewResults(repo)}
+                  isLoading={loadingRepoIds.includes(repo._id)}
                   leftIcon={<FiEye />}
-                  ml="auto"
-                  isLoading={loadingRepo}
                 >
-                  View Results
+                  View Analysis
                 </Button>
               </Flex>
-            </VStack>
+            </Box>
           </ListItem>
         ))}
       </List>
@@ -305,8 +366,8 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
               <HStack>
                 <Icon as={FiGithub} />
                 <Text>{getRepoName(selectedRepo)}</Text>
-                <Badge colorScheme={selectedRepo.isPublic ? "green" : "purple"}>
-                  {selectedRepo.isPublic ? "Public" : "Private"}
+                <Badge colorScheme={!selectedRepo.githubMetadata?.isPrivate ? "green" : "purple"}>
+                  {!selectedRepo.githubMetadata?.isPrivate ? "Public" : "Private"}
                 </Badge>
               </HStack>
             )}
@@ -364,7 +425,7 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
                 }
               }}
               colorScheme="blue"
-              leftIcon={<FiDownload />}
+              leftIcon={<FiEye />}
             >
               Re-Analyze
             </Button>

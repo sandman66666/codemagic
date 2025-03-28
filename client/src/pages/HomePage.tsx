@@ -21,6 +21,8 @@ import {
   ModalCloseButton,
   Alert,
   AlertIcon,
+  AlertTitle,
+  AlertDescription,
   Tabs,
   Tab,
   TabList,
@@ -74,7 +76,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
   toggleFile,
   toggleDirectory,
   getAllFilesInDir,
-  level = 0
+  level = 0,
 }) => {
   const [isOpen, setIsOpen] = useState(level < 2); // Auto-expand first two levels
   const { colorMode } = useColorMode();
@@ -84,7 +86,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
   if (isFile && path) {
     // File node
     return (
-      <Flex 
+      <Flex
         pl={`${level * 20 + 12}px`}
         py={1}
         alignItems="center"
@@ -93,7 +95,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
         cursor="pointer"
         onClick={() => toggleFile(path)}
       >
-        <Checkbox 
+        <Checkbox
           isChecked={selectedFiles.includes(path)}
           mr={2}
           onChange={(e) => {
@@ -102,19 +104,21 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
           }}
         />
         <Icon as={FiFile} mr={2} color="gray.500" />
-        <Text fontSize="sm" isTruncated>{name}</Text>
+        <Text fontSize="sm" isTruncated>
+          {name}
+        </Text>
       </Flex>
     );
   }
 
   // Directory node
   const dirFiles = children ? getAllFilesInDir(children) : [];
-  const isSelected = dirFiles.length > 0 && dirFiles.every(file => selectedFiles.includes(file));
-  const isPartiallySelected = dirFiles.some(file => selectedFiles.includes(file)) && !isSelected;
+  const isSelected = dirFiles.length > 0 && dirFiles.every((file) => selectedFiles.includes(file));
+  const isPartiallySelected = dirFiles.some((file) => selectedFiles.includes(file)) && !isSelected;
 
   return (
     <Box>
-      <Flex 
+      <Flex
         pl={`${level * 20 + 4}px`}
         py={1}
         alignItems="center"
@@ -123,13 +127,13 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
         cursor="pointer"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <Icon 
-          as={isOpen ? FiChevronDown : FiChevronRight} 
+        <Icon
+          as={isOpen ? FiChevronDown : FiChevronRight}
           mr={2}
           w={4}
           h={4}
         />
-        <Checkbox 
+        <Checkbox
           isChecked={isSelected}
           isIndeterminate={isPartiallySelected}
           mr={2}
@@ -139,7 +143,9 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
           }}
         />
         <Icon as={FiFolder} mr={2} color="blue.500" />
-        <Text fontWeight="medium" fontSize="sm">{name}</Text>
+        <Text fontWeight="medium" fontSize="sm">
+          {name}
+        </Text>
         {dirFiles.length > 0 && (
           <Badge ml={2} colorScheme="blue" fontSize="xs">
             {dirFiles.length}
@@ -664,11 +670,14 @@ const HomePage: React.FC = () => {
               </ModalFooter>
             </ModalContent>
           </Modal>
-          {/* Recent Repositories Section - Only shown when user is authenticated */}
-          {isAuthenticated && !result && (
+
+          {/* Recent Repositories Section - Always shown when user is authenticated */}
+          {isAuthenticated && (
+            // Recent repositories section is always shown when the user is authenticated
             <Box
               w="full"
               p={{ base: 4, md: 6 }}
+              mt={result ? 10 : 0}  
               borderRadius="lg"
               bg={colorMode === 'light' ? 'white' : 'gray.700'}
               boxShadow="md"
@@ -676,6 +685,43 @@ const HomePage: React.FC = () => {
               <RecentRepositories limit={5} />
             </Box>
           )}
+
+          {/* Authentication Hint for Unauthenticated Users */}
+          {!isAuthenticated && (
+            <Flex 
+              p={4} 
+              mb={6}
+              borderRadius="md" 
+              bg={colorMode === 'light' ? 'blue.50' : 'blue.800'}
+              border="1px solid"
+              borderColor={colorMode === 'light' ? 'blue.100' : 'blue.700'}
+              alignItems="center"
+              gap={3}
+            >
+              <Icon 
+                as={FiGithub} 
+                boxSize={5} 
+                color={colorMode === 'light' ? 'blue.600' : 'blue.200'} 
+              />
+              
+              <Box flex="1">
+                <Text fontWeight="medium" fontSize="sm" color={colorMode === 'light' ? 'blue.700' : 'blue.200'}>
+                  Connect with GitHub to save your analysis history
+                </Text>
+              </Box>
+              
+              <Button
+                size="sm"
+                colorScheme="blue"
+                leftIcon={<Icon as={FiGithub} boxSize={3} />}
+                as="a"
+                href="/api/auth/github"
+              >
+                Connect
+              </Button>
+            </Flex>
+          )}
+
           {/* Features Section */}
           <Box w="full" py={10}>
             <Heading as="h2" size={{ base: "lg", md: "xl" }} textAlign="center" mb={10}>
