@@ -19,6 +19,8 @@ import {
   startAnalysisValidator,
   compareAnalysesValidator
 } from '../validators/analysisValidators';
+import IngestedRepository from '../models/IngestedRepository';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
 const auth = passport.authenticate('jwt', { session: false });
@@ -147,5 +149,74 @@ router.post(
   publicRepoRateLimiter,
   processPublicRepositoryWithGitIngest
 );
+
+// @route   GET /api/analysis/test-ingested-repo
+// @desc    Test endpoint to verify IngestedRepository model is working
+// @access  Public - explicitly no authentication
+router.get('/test-ingested-repo', async (req, res) => {
+  logger.info('[TEST] Accessing test-ingested-repo endpoint');
+  try {
+    // Create a test record
+    const testRepo = new IngestedRepository({
+      repositoryUrl: 'https://github.com/test/repo',
+      processingId: `test-${Date.now()}`,
+      ingestData: {
+        content: 'Test content',
+        summary: 'Test summary',
+      },
+      isPublic: true
+    });
+    
+    // Try to save it
+    const savedRepo = await testRepo.save();
+    
+    // Find all IngestedRepository records
+    const allRepos = await IngestedRepository.find({}).lean();
+    
+    logger.info(`[TEST] Test save successful. Record ID: ${savedRepo._id}`);
+    logger.info(`[TEST] Found ${allRepos.length} records in IngestedRepository collection`);
+    
+    res.json({
+      success: true,
+      savedRepoId: savedRepo._id,
+      message: 'Test repository saved successfully',
+      totalCount: allRepos.length,
+      allRepos: allRepos
+    });
+  } catch (error) {
+    logger.error('[TEST] Error in test endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// @route   GET /api/analysis/ingested-repositories
+// @desc    Get all ingested repositories
+// @access  Public
+router.get('/ingested-repositories', async (req, res) => {
+  try {
+    const ingestedRepos = await IngestedRepository.find({})
+      .select('_id repositoryUrl processingId user isPublic createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    logger.info(`Retrieved ${ingestedRepos.length} ingested repositories`);
+    
+    res.json({
+      success: true,
+      count: ingestedRepos.length,
+      repositories: ingestedRepos
+    });
+  } catch (error) {
+    logger.error('Error retrieving ingested repositories:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 export default router;

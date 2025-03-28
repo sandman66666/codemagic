@@ -583,6 +583,13 @@ const HomePage: React.FC = () => {
             const contentResponse = await axios.get(`/api/analysis/repository/${repositoryId}/ingest`);
             
             setResult(contentResponse.data);
+            
+            // Check if ingestedRepositoryId is returned
+            if (response.data.ingestedRepositoryId) {
+              console.log(`Repository ingested and saved with ID: ${response.data.ingestedRepositoryId}`);
+              // You can store this ID if needed for further operations
+            }
+            
             toast({
               title: 'Repository analysis complete!',
               status: 'success',
@@ -603,7 +610,19 @@ const HomePage: React.FC = () => {
         repositoryUrl,
       });
 
-      setResult(response.data.content);
+      // Check if the API returned content or an ingestedRepositoryId
+      if (response.data.content) {
+        setResult(response.data.content);
+      } else if (response.data.result) {
+        setResult(response.data.result);
+      }
+      
+      // Check if ingestedRepositoryId is returned
+      if (response.data.ingestedRepositoryId) {
+        console.log(`Public repository ingested and saved with ID: ${response.data.ingestedRepositoryId}`);
+        // You can store this ID if needed for further operations
+      }
+      
       toast({
         title: 'Repository analysis complete!',
         status: 'success',

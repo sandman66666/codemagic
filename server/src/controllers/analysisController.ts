@@ -2,11 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { Document, Types } from 'mongoose';
 import Repository from '../models/Repository';
 import Analysis from '../models/Analysis';
+import IngestedRepository from '../models/IngestedRepository';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { analyzeRepository } from '../services/analyzeRepository';
 import { redisService } from '../services/redisService';
 import { repositoryIngestService } from '../services/repositoryIngestService';
+import { fetchGitHubRepoMetadata } from '../utils/githubUtils';
 import fs from 'fs';
 import path from 'path';
 import { SimpleGit, simpleGit } from 'simple-git';
@@ -121,7 +123,7 @@ export const processRepositoryWithGitIngest = async (req: Request, res: Response
       return next(new AppError('Not authorized', 403));
     }
     
-    logger.info(`Processing repository with gitingest: ${repository.name} (${repositoryId})`);
+    logger.info(`[INGEST] Processing repository with gitingest: ${repository.name} (${repositoryId})`);
     
     const repoId = (repository._id as Types.ObjectId).toString();
     let repoPath: string = '';
@@ -181,22 +183,95 @@ export const processRepositoryWithGitIngest = async (req: Request, res: Response
       
       // Process the repository with gitingest using the path
       try {
+        logger.info(`[INGEST] Starting gitingest processing for: ${repository.name} (${repositoryId})`);
         const result = await repositoryIngestService.processRepository(repoPath, repoId);
+        logger.info(`[INGEST] gitingest processing completed successfully for: ${repository.name} (${repositoryId})`);
         
-        // Clean up temporary repo if we created one
-        if (temporaryRepoCreated) {
-          try {
-            await rimrafPromise(repoPath);
-          } catch (cleanupError) {
-            logger.warn(`Failed to clean up temporary repository, but processing succeeded: ${cleanupError}`);
+        // Get repository content
+        logger.info(`[INGEST] Fetching repository content for: ${repository.name} (${repositoryId})`);
+        const content = await repositoryIngestService.getRepositoryContent(repoId);
+        
+        // Properly handle content based on actual type
+        const contentInfo = (() => {
+          if (typeof content === 'string') {
+            return `string of length ${(content as string).length}`;
+          } else if (content && typeof content === 'object') {
+            return `object with keys: ${Object.keys(content as object).join(', ')}`;
+          } else {
+            return 'undefined or null';
           }
-        }
+        })();
         
-        res.json({
-          success: true,
-          message: 'Repository processed with gitingest',
-          result
-        });
+        logger.info(`[INGEST] Repository content fetched successfully: ${repository.name} (${repositoryId}), content: ${contentInfo}`);
+        
+        try {
+          // Fetch GitHub metadata
+          logger.info(`[INGEST] Fetching GitHub metadata for: ${repository.cloneUrl}`);
+          const githubMetadata = await fetchGitHubRepoMetadata(
+            repository.cloneUrl, 
+            user.githubToken
+          );
+          
+          if (githubMetadata) {
+            logger.info(`[INGEST] GitHub metadata fetched successfully for: ${repository.name}`);
+          } else {
+            logger.warn(`[INGEST] Could not fetch GitHub metadata for: ${repository.name}`);
+          }
+          
+          // Save repository and ingest data to IngestedRepository model
+          logger.info(`[INGEST] Saving to IngestedRepository for: ${repository.name} (${repositoryId})`);
+          
+          // Create IngestedRepository document with flattened structure
+          const ingestedRepository = new IngestedRepository({
+            repository: repositoryId,
+            repositoryUrl: repository.cloneUrl,
+            user: user._id,
+            processingId: repoId,
+            ingestData: {
+              // If content is an object with nested fields, extract them
+              content: typeof content === 'object' && content?.content ? content.content : content,
+              summary: typeof content === 'object' && content?.summary ? content.summary : null,
+              fileTree: typeof content === 'object' && content?.tree ? content.tree : null,
+              stats: result.stats || null,
+              metadata: result.metadata || null
+            },
+            // Add GitHub metadata if available
+            githubMetadata: githubMetadata || undefined,
+            isPublic: false
+          });
+          
+          // Save to database
+          const savedRepo = await ingestedRepository.save();
+          logger.info(`[INGEST] Successfully saved to IngestedRepository: ${repository.name} (${repositoryId}), document ID: ${savedRepo._id}`);
+          
+          // Clean up temporary repo if we created one
+          if (temporaryRepoCreated) {
+            try {
+              await rimrafPromise(repoPath);
+              logger.info(`[INGEST] Cleaned up temporary repository folder: ${repoPath}`);
+            } catch (cleanupError) {
+              logger.warn(`Failed to clean up temporary repository, but processing succeeded: ${cleanupError}`);
+            }
+          }
+          
+          res.json({
+            success: true,
+            message: 'Repository processed with gitingest',
+            result,
+            ingestedRepositoryId: savedRepo._id // Return the ID of the saved document
+          });
+        } catch (saveError) {
+          logger.error(`[INGEST] Error saving to IngestedRepository: ${saveError.message}`);
+          logger.error(`[INGEST] Error details:`, saveError);
+          
+          // Still return success to the client, but log the error
+          res.json({
+            success: true,
+            message: 'Repository processed with gitingest, but data was not saved to database',
+            result,
+            error: saveError.message
+          });
+        }
       } catch (processError) {
         logger.error(`Repository processing error: ${processError}`);
         
@@ -461,22 +536,89 @@ export const processPublicRepositoryWithGitIngest = async (req: Request, res: Re
     const repoPath = path.join(repositoryIngestService.tempDir, `public-${processingId}`);
     
     // Process the repository with gitingest directly using the URL
-    logger.info(`Processing public repository with gitingest: ${repositoryUrl}`);
+    logger.info(`[INGEST] Processing public repository with gitingest: ${repositoryUrl}, processingId: ${processingId}`);
     
     try {
       // Pass URL directly to gitingest through our service
+      logger.info(`[INGEST] Starting gitingest processing for public repo: ${repositoryUrl}`);
       const result = await repositoryIngestService.processRepository(repositoryUrl, processingId);
+      logger.info(`[INGEST] gitingest processing completed successfully for public repo: ${repositoryUrl}`);
       
       try {
         // Get the repository content
+        logger.info(`[INGEST] Fetching repository content for public repo: ${repositoryUrl}`);
         const content = await repositoryIngestService.getRepositoryContent(processingId);
         
-        res.json({
-          success: true,
-          message: 'Repository processed with gitingest',
-          processingId,
-          content
-        });
+        // Properly handle content based on actual type
+        const contentInfo = (() => {
+          if (typeof content === 'string') {
+            return `string of length ${(content as string).length}`;
+          } else if (content && typeof content === 'object') {
+            return `object with keys: ${Object.keys(content as object).join(', ')}`;
+          } else {
+            return 'undefined or null';
+          }
+        })();
+        
+        logger.info(`[INGEST] Repository content fetched successfully for public repo: ${repositoryUrl}, content: ${contentInfo}`);
+        
+        try {
+          // Fetch GitHub metadata
+          logger.info(`[INGEST] Fetching GitHub metadata for public repo: ${repositoryUrl}`);
+          // For public repos, we don't have a token, so we use the public API
+          const githubMetadata = await fetchGitHubRepoMetadata(repositoryUrl);
+          
+          if (githubMetadata) {
+            logger.info(`[INGEST] GitHub metadata fetched successfully for public repo: ${repositoryUrl}`);
+          } else {
+            logger.warn(`[INGEST] Could not fetch GitHub metadata for public repo: ${repositoryUrl}`);
+          }
+          
+          // Save repository and ingest data to IngestedRepository model
+          logger.info(`[INGEST] Saving to IngestedRepository for public repo: ${repositoryUrl}`);
+          
+          // Create IngestedRepository document with flattened structure
+          const ingestedRepository = new IngestedRepository({
+            repositoryUrl,
+            user: (req.user as any)?._id || null, // Optional: store user if authenticated
+            processingId,
+            ingestData: {
+              // If content is an object with nested fields, extract them
+              content: typeof content === 'object' && content?.content ? content.content : content,
+              summary: typeof content === 'object' && content?.summary ? content.summary : null,
+              fileTree: typeof content === 'object' && content?.tree ? content.tree : null,
+              stats: result.stats || null,
+              metadata: result.metadata || null
+            },
+            // Add GitHub metadata if available
+            githubMetadata: githubMetadata || undefined,
+            isPublic: true
+          });
+          
+          // Save to database
+          const savedRepo = await ingestedRepository.save();
+          logger.info(`[INGEST] Successfully saved to IngestedRepository for public repo: ${repositoryUrl}, document ID: ${savedRepo._id}`);
+          
+          res.json({
+            success: true,
+            message: 'Repository processed with gitingest',
+            processingId,
+            content,
+            ingestedRepositoryId: savedRepo._id // Return the ID of the saved document
+          });
+        } catch (saveError) {
+          logger.error(`[INGEST] Error saving to IngestedRepository for public repo: ${saveError.message}`);
+          logger.error(`[INGEST] Error details:`, saveError);
+          
+          // Still return success but with an error message about saving
+          res.json({
+            success: true,
+            message: 'Repository processed with gitingest, but data was not saved to database',
+            processingId,
+            content,
+            error: saveError.message
+          });
+        }
       } catch (contentError) {
         logger.error(`Error getting repository content: ${contentError}`);
         res.status(206).json({
