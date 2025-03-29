@@ -303,12 +303,6 @@ const RecentRepositories: React.FC<RecentRepositoriesProps> = ({ limit = 5 }) =>
                 </Text>
               )}
               
-              {/* Analysis Tags */}
-              <Tag size="sm" mb={3} colorScheme="teal">
-                <TagLeftIcon as={FiDatabase} />
-                Ingested Data
-              </Tag>
-              
               <Divider my={2} />
               
               <Flex justify="space-between" align="center" mt={2} wrap="wrap">

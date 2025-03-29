@@ -193,7 +193,7 @@ router.post('/insights', async (req: express.Request, res: express.Response) => 
       const response = await axios.post(
         'https://api.anthropic.com/v1/messages',
         {
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-7-sonnet-20250219',
           max_tokens: 4000,
           messages: [{ role: 'user', content: message }]
         },

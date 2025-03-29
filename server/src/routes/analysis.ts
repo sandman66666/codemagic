@@ -147,7 +147,6 @@ router.get(
 router.post(
   '/public/ingest',
   publicRepoRateLimiter,
-  passport.authenticate('jwt', { session: false, failWithError: false }),
   processPublicRepositoryWithGitIngest
 );
 
